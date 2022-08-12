@@ -18,20 +18,24 @@ def lambda_handler(event, context):
     bucket = event['Records'][0]['s3']['bucket']['name']
     key = urllib.parse.unquote_plus(event['Records'][0]['s3']['object']['key'], encoding='utf-8')
 
-    dictionary, num = detect_faces(bucket,key)
+    print('Llamada de crop')
+
+    dictionary, num, image= detect_faces(bucket,key)
 
     print('\n Resultado final: \n')
     print(dictionary)
     print('número de personas: ' + '{0:.0f}'.format(num) + '\n')
+
+    print('Llamada de crop')
+    cropFace(image,dictionary,num,key)
+
+
 
    
 
 def detect_faces(bucket,key):
 
     client=boto3.client('rekognition', 'us-east-1')
-
-    threshold = 80
-    maxFaces = 1
 
 
     print(bucket)
@@ -91,7 +95,7 @@ def detect_faces(bucket,key):
         width = imgWidth * box['Width']
         height = imgHeight * box['Height']
 
-        dict['cara'+'{0:.0f}'.format(count)]=[left,top,left+width,top-height]
+        dict['cara'+'{0:.0f}'.format(count)]=[left,top,left+width,top+height]
                 
         count=count+1
 
@@ -117,7 +121,7 @@ def detect_faces(bucket,key):
 
     # image.show()
 
-    return dict, numCaras
+    return dict, numCaras, image
 
 
 def cropFace(image,dict,numCaras,key):
@@ -126,11 +130,15 @@ def cropFace(image,dict,numCaras,key):
 
     for i in range(1,numCaras+1):
         key=key[0:len(key)-4]
-        nombre=key+i
+        nombre=key+"{0:.0f}".format(i)
 
-        dimensiones=dict['cara'+i]
+        dimensiones=dict['cara'+"{0:.0f}".format(i)]
 
-        imagecrop=image.crop(dimensiones[0],dimensiones[1],dimensiones[2],dimensiones[3])
+        print('dimensión')
+        print(int(dimensiones[0]))
+
+        dim=(int(dimensiones[0]),int(dimensiones[1]),int(dimensiones[2]),int(dimensiones[3]))
+        imagecrop=image.crop(dim)
 
         client.upload_fileobj(imagecrop, 'prueba-rekognition-analitica', nombre+'.jpg')
 
