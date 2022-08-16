@@ -129,8 +129,10 @@ def cropFace(image,dict,numCaras,key):
 
     client=boto3.client('s3')
 
+    key=key[0:len(key)-4]
+
     for i in range(1,numCaras+1):
-        key=key[0:len(key)-4]
+        
         nombre=key+"{0:.0f}".format(i)
 
         dimensiones=dict['cara'+"{0:.0f}".format(i)]
@@ -144,13 +146,23 @@ def cropFace(image,dict,numCaras,key):
         img_byte_arr = io.BytesIO()
 
 
-        imagecrop.save(img_byte_arr, format="JPEG")
+        # imagecrop.save(img_byte_arr, format="JPEG")
 
-        img_str = base64.b64encode(img_byte_arr.getvalue())
+        # img_str = base64.b64encode(img_byte_arr.getvalue())
 
-        print(type(img_str))
+        imagecrop.save(img_byte_arr, format='JPEG')
+        img_byte_arr = img_byte_arr.getvalue()
 
-        client.upload_fileobj(img_str, 'prueba-rekognition-analitica', nombre+'.jpeg')
+        print(nombre+'.jpeg')
+
+        # client.upload_fileobj(img_str.read(), 'prueba-rekognition-analitica', nombre+'.jpeg')
+
+        client.put_object(
+    Body=img_byte_arr,
+    Bucket='prueba-rekognition-analitica',
+    Key=nombre+'.jpeg',
+
+)
 
 
 
