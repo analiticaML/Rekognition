@@ -6,6 +6,7 @@ import boto3
 import urllib
 import io
 from PIL import Image, ImageDraw, ExifTags, ImageColor
+import base64
 
 
 
@@ -140,7 +141,16 @@ def cropFace(image,dict,numCaras,key):
         dim=(int(dimensiones[0]),int(dimensiones[1]),int(dimensiones[2]),int(dimensiones[3]))
         imagecrop=image.crop(dim)
 
-        client.upload_fileobj(imagecrop, 'prueba-rekognition-analitica', nombre+'.jpg')
+        img_byte_arr = io.BytesIO()
+
+
+        imagecrop.save(img_byte_arr, format="JPEG")
+
+        img_str = base64.b64encode(img_byte_arr.getvalue())
+
+        print(type(img_str))
+
+        client.upload_fileobj(img_str, 'prueba-rekognition-analitica', nombre+'.jpeg')
 
 
 
