@@ -32,17 +32,22 @@ def lambda_handler(event, context):
     date,time=objectDate(bucket,key)
 
     count=0
+    print('lenlistaimg')
+    print(len(listaimg))
+    print(len(listaepp))
 
     for image in listaimg:
 
         #Se busca si la persona esta en una collection
         #Se recibe un booleano donde true indica que si pertence y false que no pertenece
         faceids=search_faces(image)
-
+        print('faceId')
+        print(faceids)
         # #Se actualiza atributo (Status) en la base de datos en DynamoDB
         # #de acuerdo al resultado de la función search_faces para cada una de las coincidencias en la collection
         # for faceid in faceids:
-        updateItemDB(faceids[0],date,time,listaepp[count])
+        if faceids:
+            updateItemDB(faceids[0],date,time,listaepp[count])
 
         count=count+1
 
@@ -110,6 +115,7 @@ def detect_ppe(bucket,key):
 
 
     count=1
+    listaEPP=[]
 
     for person in response['Persons']:
 
@@ -136,9 +142,11 @@ def detect_ppe(bucket,key):
         print ('Body Parts\n----------')
         body_parts = person['BodyParts']
 
-        listaEPP=[]
 
-        dict={'FACE_COVER':False,'HAND_COVER':False,'HEAD_COVER':False}
+        
+        dictepp = {}
+
+        dictepp={'FACE_COVER':False,'HAND_COVER':False,'HEAD_COVER':False}
 
         if len(body_parts) == 0:
                 print ('No body parts found')
@@ -154,9 +162,9 @@ def detect_ppe(bucket,key):
                         print('\t\t' + ppe_item['Type'] + '\n\t\t\tConfidence: ' + str(ppe_item['Confidence'])) 
                         print('\t\tCovers body part: ' + str(ppe_item['CoversBodyPart']['Value']) + '\n\t\t\tConfidence: ' + str(ppe_item['CoversBodyPart']['Confidence']))
 
-                        dict[ppe_item['Type']]=ppe_item['CoversBodyPart']['Value']
+                        dictepp[ppe_item['Type']]=ppe_item['CoversBodyPart']['Value']
                         
-        listaEPP.append(dict)
+        listaEPP.append(dictepp)
 
                         
        
@@ -259,30 +267,31 @@ def search_faces(image):
 
 
     print('problemas para buscar en la collection')
-
-    response=client.search_faces_by_image(CollectionId=collectionId,
-                                    Image={'Bytes': image},
-                                    FaceMatchThreshold=threshold,
-                                     MaxFaces=maxFaces)
-
-
-    faceMatches = response['FaceMatches']
-
-
-    print('funcionó hasta la collection')
-    #Lista con el FaceId de la cara de coincidencia en la colección
-    listface=[]
+    try:
+        response=client.search_faces_by_image(CollectionId=collectionId,
+                                        Image={'Bytes': image},
+                                        FaceMatchThreshold=threshold,
+                                        MaxFaces=maxFaces)
+                                        
+        faceMatches = response['FaceMatches']
 
 
-    for match in faceMatches:
-        print('FaceId:' + match['Face']['FaceId'])
-        print('ImageId:' + match['Face']['ImageId'])
-        print('Similarity: ' + "{:.2f}".format(match['Similarity']) + "%")
-        print('Confidence: ' + str(match['Face']['Confidence']))
+        print('funcionó hasta la collection')
+        #Lista con el FaceId de la cara de coincidencia en la colección
+        listface=[]
 
-        #Si la similaridad entre coincidencia es mayor a 80% se agrega el FaceId a la lista listface
-        if match['Similarity'] > 80.0:
-            listface.append( match['Face']['FaceId'])
+    
+        for match in faceMatches:
+            print('FaceId:' + match['Face']['FaceId'])
+            print('ImageId:' + match['Face']['ImageId'])
+            print('Similarity: ' + "{:.2f}".format(match['Similarity']) + "%")
+            print('Confidence: ' + str(match['Face']['Confidence']))
+    
+            #Si la similaridad entre coincidencia es mayor a 80% se agrega el FaceId a la lista listface
+            if match['Similarity'] > 80.:
+                listface.append( match['Face']['FaceId'])
+    except:
+        listface = []
 
     return listface
 
@@ -332,8 +341,7 @@ def updateItemDB(imgId,date,time,itemsepp):
                 'TapaBocas':{
                     'Value':{
                         'BOOL': itemsepp['FACE_COVER']
-                    }
-                    ,
+                    },
                     'Action':'PUT'
                 },
 
