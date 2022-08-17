@@ -29,6 +29,8 @@ def lambda_handler(event, context):
     print('Llamada de crop')
     listaimg=cropFace(image,dictionary,num,key)
 
+    date,time=objectDate(bucket,key)
+
     count=0
 
     for image in listaimg:
@@ -40,11 +42,34 @@ def lambda_handler(event, context):
         # #Se actualiza atributo (Status) en la base de datos en DynamoDB
         # #de acuerdo al resultado de la función search_faces para cada una de las coincidencias en la collection
         # for faceid in faceids:
-        updateItemDB(faceids[0],listaepp[count])
+        updateItemDB(faceids[0],date,time,listaepp[count])
 
         count=count+1
 
+def objectDate(bucket,key):
 
+    client=boto3.client('s3')
+
+    response = client.head_object(Bucket=bucket, Key=key)
+    datetime_value = str(response["LastModified"])
+
+    time=datetime_value[0:len(datetime_value)-6]
+
+    import datetime
+    utc_datetime = datetime.datetime.utcnow()
+    utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
+
+    UTC_OFFSET_TIMEDELTA = 5
+    local_datetime = datetime.datetime.strptime(time, "%Y-%m-%d %H:%M:%S")
+    result_utc_datetime = local_datetime - datetime.timedelta(hours=UTC_OFFSET_TIMEDELTA)
+    result_utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
+
+    result_utc_datetime=str(result_utc_datetime)
+
+    fecha=result_utc_datetime[0:len(result_utc_datetime)-9]
+    hora=result_utc_datetime[11:len(result_utc_datetime)]
+
+    return fecha,hora
   
 def detect_ppe(bucket,key):
 
@@ -128,7 +153,7 @@ def detect_ppe(bucket,key):
                         print('\t\tCovers body part: ' + str(ppe_item['CoversBodyPart']['Value']) + '\n\t\t\tConfidence: ' + str(ppe_item['CoversBodyPart']['Confidence']))
        
                         
-                        listaEPP.append({[ppe_item['Type']]:ppe_item['CoversBodyPart']['Value']})
+                        listaEPP.append({str([ppe_item['Type']]):ppe_item['CoversBodyPart']['Value']})
 
                         
        
