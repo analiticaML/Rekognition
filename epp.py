@@ -1,4 +1,5 @@
 from distutils.command.clean import clean
+from itertools import count
 import json
 import os
 import logging
@@ -19,7 +20,7 @@ def lambda_handler(event, context):
     bucket = event['Records'][0]['s3']['bucket']['name']
     key = urllib.parse.unquote_plus(event['Records'][0]['s3']['object']['key'], encoding='utf-8')
 
-    dictionary, num, image= detect_ppe(bucket, key)
+    dictionary, num, image,listaepp= detect_ppe(bucket, key)
 
     print('\n Resultado final: \n')
     print(dictionary)
@@ -28,17 +29,20 @@ def lambda_handler(event, context):
     print('Llamada de crop')
     listaimg=cropFace(image,dictionary,num,key)
 
+    count=0
+
     for image in listaimg:
 
         #Se busca si la persona esta en una collection
         #Se recibe un booleano donde true indica que si pertence y false que no pertenece
         faceids=search_faces(image)
-        print(faceids)
 
         # #Se actualiza atributo (Status) en la base de datos en DynamoDB
         # #de acuerdo al resultado de la función search_faces para cada una de las coincidencias en la collection
         # for faceid in faceids:
-        #     updateItemDB(faceid)
+        updateItemDB(faceids[0],listaepp[count])
+
+        count=count+1
 
 
   
@@ -106,6 +110,9 @@ def detect_ppe(bucket,key):
 
         print ('Body Parts\n----------')
         body_parts = person['BodyParts']
+
+        listaEPP=[]
+
         if len(body_parts) == 0:
                 print ('No body parts found')
         else:
@@ -119,12 +126,20 @@ def detect_ppe(bucket,key):
                     for ppe_item in ppe_items:
                         print('\t\t' + ppe_item['Type'] + '\n\t\t\tConfidence: ' + str(ppe_item['Confidence'])) 
                         print('\t\tCovers body part: ' + str(ppe_item['CoversBodyPart']['Value']) + '\n\t\t\tConfidence: ' + str(ppe_item['CoversBodyPart']['Confidence']))
+       
+                        
+                        listaEPP.append({[ppe_item['Type']]:ppe_item['CoversBodyPart']['Value']})
+
+                        
+       
                         # print('\t\tBounding Box:')
                         # print ('\t\t\tTop: ' + str(ppe_item['BoundingBox']['Top']))
                         # print ('\t\t\tLeft: ' + str(ppe_item['BoundingBox']['Left']))
                         # print ('\t\t\tWidth: ' +  str(ppe_item['BoundingBox']['Width']))
                         # print ('\t\t\tHeight: ' +  str(ppe_item['BoundingBox']['Height']))
                         # print ('\t\t\tConfidence: ' + str(ppe_item['Confidence']))
+
+            
 
     print('Person ID Summary\n----------------')
 
@@ -134,7 +149,7 @@ def detect_ppe(bucket,key):
 
     numPersonas=len(response['Persons'])
 
-    return dict, numPersonas, image
+    return dict, numPersonas, image, listaEPP
 
 #Display summary information for supplied summary.
 def display_summary(summary_type, summary):
@@ -242,3 +257,61 @@ def search_faces(image):
             listface.append( match['Face']['FaceId'])
 
     return listface
+
+
+#Se define función para actualizar un item de la base de datos de dynamodb
+#Recibe el FaceId del item a actualizar
+def updateItemDB(imgId,date,time,itemsepp):
+
+    #Cliente representando servicio dynamodb
+    client = boto3.client('dynamodb')
+
+    try:
+
+        #Se actualiza la base de datos cambiando el atributo status con el valor booleano True
+        response = client.update_item(
+            TableName='dataset-collection-personal',
+            Key={
+                'faceId': {
+                    'S': imgId
+                }
+            },
+            AttributeUpdates={
+                'Fecha':{
+                    'Value':{
+                        'S': date
+                    },
+                    'Action':'PUT'
+                },
+                'Hora':{
+                    'Value':{
+                        'S':time
+                    },
+                    'Action':'PUT'
+                },
+                'Casco':{
+                    'Value':{
+                        'BOOL': itemsepp['HEAD_COVER']
+                    }
+                },
+                'Guantes':{
+                    'Value':{
+                        'BOOL': itemsepp['HAND_COVER']
+                    }
+                },
+                'TapaBocas':{
+                    'Value':{
+                        'BOOL': itemsepp['FACE_COVER']
+                    }
+                },
+
+            },
+
+
+        )   
+
+        print('Actualizó DB')
+
+    except Exception as msg:
+
+        print(f"Oops, no se pudo actualizar el item: {msg}")
