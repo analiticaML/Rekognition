@@ -31,19 +31,44 @@ def lambda_handler(event, context):
     print('Llamada de crop')
     listaimg=cropFace(image,dictionary,num,key)
 
+    date,time=objectDate(bucket,key)
+
     for image in listaimg:
 
         #Se busca si la persona esta en una collection
         #Se recibe un booleano donde true indica que si pertence y false que no pertenece
-        faceids=search_faces(image)
+        imgsids=search_faces(image)
 
         #Se actualiza atributo (Status) en la base de datos en DynamoDB
         #de acuerdo al resultado de la función search_faces para cada una de las coincidencias en la collection
-        for faceid in faceids:
-            updateItemDB(faceid)
+        for imgid in imgsids:
+            updateItemDB(imgid,date,time)
 
 
+def objectDate(bucket,key):
 
+    client=boto3.client('s3')
+
+    response = client.head_object(Bucket=bucket, Key=key)
+    datetime_value = str(response["LastModified"])
+
+    time=datetime_value[0:len(datetime_value)-6]
+
+    import datetime
+    utc_datetime = datetime.datetime.utcnow()
+    utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
+
+    UTC_OFFSET_TIMEDELTA = datetime.datetime.utcnow() - datetime.datetime.now()
+    local_datetime = datetime.datetime.strptime(time, "%Y-%m-%d %H:%M:%S")
+    result_utc_datetime = local_datetime - UTC_OFFSET_TIMEDELTA
+    result_utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
+
+    result_utc_datetime=str(result_utc_datetime)
+
+    fecha=result_utc_datetime[0:len(result_utc_datetime)-9]
+    hora=result_utc_datetime[11:len(result_utc_datetime)]
+
+    return fecha,hora
    
 
 def detect_faces(bucket,key):
@@ -224,14 +249,14 @@ def search_faces(image):
 
         #Si la similaridad entre coincidencia es mayor a 80% se agrega el FaceId a la lista listface
         if match['Similarity'] > 80.0:
-            listface.append( match['Face']['FaceId'])
+            listface.append( match['Face']['ExternalImageId'])
 
     return listface
 
 
 #Se define función para actualizar un item de la base de datos de dynamodb
 #Recibe el FaceId del item a actualizar
-def updateItemDB(FaceId):
+def updateItemDB(imgId,date,time):
 
     #Cliente representando servicio dynamodb
     client = boto3.client('dynamodb')
@@ -242,8 +267,8 @@ def updateItemDB(FaceId):
         response = client.update_item(
             TableName='dataset-collection-images',
             Key={
-                'FaceID': {
-                    'S': FaceId
+                'Nombre': {
+                    'S': imgId
                 }
             },
             AttributeUpdates={
@@ -252,6 +277,18 @@ def updateItemDB(FaceId):
                         'BOOL': True
                     },
                     'Action': 'PUT'
+                },
+                'Fecha':{
+                    'Value':{
+                        'S': date
+                    },
+                    'Action':'PUT'
+                },
+                'Hora':{
+                    'Value':{
+                        'S':time
+                    },
+                    'Action':'PUT'
                 }
             },
 
