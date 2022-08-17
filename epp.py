@@ -138,6 +138,8 @@ def detect_ppe(bucket,key):
 
         listaEPP=[]
 
+        dict={'FACE_COVER':False,'HAND_COVER':False,'HEAD_COVER':False}
+
         if len(body_parts) == 0:
                 print ('No body parts found')
         else:
@@ -151,9 +153,10 @@ def detect_ppe(bucket,key):
                     for ppe_item in ppe_items:
                         print('\t\t' + ppe_item['Type'] + '\n\t\t\tConfidence: ' + str(ppe_item['Confidence'])) 
                         print('\t\tCovers body part: ' + str(ppe_item['CoversBodyPart']['Value']) + '\n\t\t\tConfidence: ' + str(ppe_item['CoversBodyPart']['Confidence']))
-       
+
+                        dict[ppe_item['Type']]=ppe_item['CoversBodyPart']['Value']
                         
-                        listaEPP.append({str([ppe_item['Type']]):ppe_item['CoversBodyPart']['Value']})
+        listaEPP.append(dict)
 
                         
        
@@ -317,17 +320,21 @@ def updateItemDB(imgId,date,time,itemsepp):
                 'Casco':{
                     'Value':{
                         'BOOL': itemsepp['HEAD_COVER']
-                    }
+                    },
+                    'Action':'PUT'
                 },
                 'Guantes':{
                     'Value':{
                         'BOOL': itemsepp['HAND_COVER']
-                    }
+                    },
+                    'Action':'PUT'
                 },
                 'TapaBocas':{
                     'Value':{
                         'BOOL': itemsepp['FACE_COVER']
                     }
+                    ,
+                    'Action':'PUT'
                 },
 
             },
