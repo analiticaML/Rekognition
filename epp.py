@@ -222,7 +222,7 @@ def search_faces(image):
     client=boto3.client('rekognition', 'us-east-1')
 
 
-    collectionId = 'CollectionAnalitica' #Nombre de la colección
+    collectionId = 'collection-epp' #Nombre de la colección
     threshold = 80 #Umbral para similaridad entre caras
     maxFaces = 100 #Número máximo de caras que quiere reconocer de la colección
     
@@ -270,7 +270,7 @@ def updateItemDB(imgId,date,time,itemsepp):
 
         #Se actualiza la base de datos cambiando el atributo status con el valor booleano True
         response = client.update_item(
-            TableName='dataset-collection-personal',
+            TableName='dataset-collection-epp',
             Key={
                 'faceId': {
                     'S': imgId
