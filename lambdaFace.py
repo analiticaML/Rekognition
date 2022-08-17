@@ -41,8 +41,8 @@ def lambda_handler(event, context):
 
         #Se actualiza atributo (Status) en la base de datos en DynamoDB
         #de acuerdo al resultado de la función search_faces para cada una de las coincidencias en la collection
-        for imgid in imgsids:
-            updateItemDB(imgid,date,time)
+        
+        updateItemDB(imgsids[0],date,time)
 
 
 def objectDate(bucket,key):
@@ -58,9 +58,9 @@ def objectDate(bucket,key):
     utc_datetime = datetime.datetime.utcnow()
     utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
 
-    UTC_OFFSET_TIMEDELTA = datetime.datetime.utcnow() - datetime.datetime.now()
+    UTC_OFFSET_TIMEDELTA = 5
     local_datetime = datetime.datetime.strptime(time, "%Y-%m-%d %H:%M:%S")
-    result_utc_datetime = local_datetime - UTC_OFFSET_TIMEDELTA
+    result_utc_datetime = local_datetime - datetime.timedelta(hours=UTC_OFFSET_TIMEDELTA)
     result_utc_datetime.strftime("%Y-%m-%d %H:%M:%S")
 
     result_utc_datetime=str(result_utc_datetime)
@@ -222,7 +222,7 @@ def search_faces(image):
     client=boto3.client('rekognition', 'us-east-1')
 
 
-    collectionId = 'CollectionAnalitica' #Nombre de la colección
+    collectionId = 'collection-rekognition' #Nombre de la colección
     threshold = 80 #Umbral para similaridad entre caras
     maxFaces = 100 #Número máximo de caras que quiere reconocer de la colección
     
@@ -265,7 +265,7 @@ def updateItemDB(imgId,date,time):
 
         #Se actualiza la base de datos cambiando el atributo status con el valor booleano True
         response = client.update_item(
-            TableName='dataset-collection-images',
+            TableName='dataset-collection-personal',
             Key={
                 'Nombre': {
                     'S': imgId
