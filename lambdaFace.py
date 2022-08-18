@@ -60,6 +60,9 @@ def lambda_handler(event, context):
         # true indica que reconoció a una persona de la colección y false que no la reconoció      
         updateItemDB(imgsids[0],date,time)
 
+        if imgsids:
+            deleteObject(bucket,key)
+
 
 #Función para obtener la fecha y la horas de la modificación de un objeto en un bucket 
 #Recibe como parámetro el nombre del bucket y de la imagen
@@ -274,3 +277,9 @@ def updateItemDB(imgId,date,time):
     except Exception as msg:
 
         print(f"Oops, no se pudo actualizar el item: {msg}")
+
+
+def deleteObject(bucket, key):
+
+    s3 = boto3.resource('s3')
+    s3.Object(bucket, key).delete()
