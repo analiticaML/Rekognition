@@ -54,12 +54,15 @@ def lambda_handler(event, context):
         #Retorna una lista con el ExternalImageId de las coincidencias en la colección
         imgsids=search_faces(image)
 
+        # Si se encuentra una persona de la base de datos
         #Se actualizan los atributos status, Fecha y Hora en la base de datos en DynamoDB de acuerdo 
         #al resultado de la función search_faces para cada una de las coincidencias en la collection
         # El valor del atributo Satus es un booleano: 
-        # true indica que reconoció a una persona de la colección y false que no la reconoció      
-        updateItemDB(imgsids[0],date,time)
+        # true indica que reconoció a una persona de la colección y false que no la reconoció                 
+        if imgsids:   
+            updateItemDB(imgsids[0],date,time)
 
+        #Si se identifico a la persona en la colección se elimina la imagen del bucket
         if imgsids:
             deleteObject(bucket,key)
 
@@ -220,6 +223,7 @@ def search_faces(image):
 
 
     for match in faceMatches:
+        print('--------------------\n')
         print('ImageId:' + match['Face']['ImageId'])
         print('Similarity: ' + "{:.2f}".format(match['Similarity']) + "%")
         print('Confidence: ' + str(match['Face']['Confidence']))
@@ -279,7 +283,10 @@ def updateItemDB(imgId,date,time):
         print(f"Oops, no se pudo actualizar el item: {msg}")
 
 
+#Función para eliminar objetos del bucket
+#La función recibe como parámetros el nombre del bucket y de la imagen
 def deleteObject(bucket, key):
 
+    #Cliente representando servicio dynamodb
     s3 = boto3.resource('s3')
     s3.Object(bucket, key).delete()
