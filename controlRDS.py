@@ -28,6 +28,7 @@ def mysql_end_connection(conexion):
 
 def create_initial_mysql_control_db(lista,keys,conexion,bucketName):
 
+    personas = []
     # la lista creada en la descripcion de las caras en la collection y los paths en la lista keys se recorren
     # y se emparejan los faceId de cada cara con la imagen en el bucket
     for item in lista:
@@ -56,7 +57,9 @@ def create_initial_mysql_control_db(lista,keys,conexion,bucketName):
                     consulta = "INSERT  INTO  control(nombre, fecha, hora, estado, similaridad, confianza) VALUES('{0}', '{1}', '{2}','{3}','{4}','{5}');".format(nombre,
                      fecha, hora, estado, similaridad, confianza)
 
-                    cursorInsert.execute(consulta)
+                    if item[2] not in personas: 
+                        personas.append(item[2])
+                        cursorInsert.execute(consulta)
 
                     conexion.commit()
                     cursorInsert.close()
@@ -74,7 +77,7 @@ def create_initial_mysql_control_db(lista,keys,conexion,bucketName):
 #  
 def list_faces_in_collection(collection_id):
 
-
+    lista=[]
     maxResults=1
     faces_count=0
     tokens=True
@@ -89,7 +92,6 @@ def list_faces_in_collection(collection_id):
     # creamos un ciclo para recorrer la lista de los json 
     while tokens:
 
-        lista=[]
         list1 = []
         faces=response['Faces']
 
@@ -147,7 +149,7 @@ def main():
     print("faces count: " + str(faces_count))
 
     conexion = mysql_start_connection("analitica","analitica123" , 
-    "analitica-ml.cwklrzbxbtx.us-east-1.rds.amazonaws.com", "reconocimiento", 3306)
+    "analitica-ml.cwklrzbxbt5x.us-east-1.rds.amazonaws.com", "reconocimiento", 3306)
 
     create_initial_mysql_control_db(lista,keys,conexion,bucketName)
 
