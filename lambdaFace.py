@@ -19,6 +19,7 @@ import urllib
 import io
 from PIL import Image
 import datetime
+import mysql.connector
 
 
 #Se define función principal de ejecución: Función Handler del evento de S3
@@ -52,18 +53,25 @@ def lambda_handler(event, context):
 
         #Se busca si la persona esta en una collection
         #Retorna una lista con el ExternalImageId de las coincidencias en la colección
-        imgsids=search_faces(image)
+        imgsid, similarity, confidence = search_faces(image)
 
         # Si se encuentra una persona de la base de datos
         #Se actualizan los atributos status, Fecha y Hora en la base de datos en DynamoDB de acuerdo 
         #al resultado de la función search_faces para cada una de las coincidencias en la collection
         # El valor del atributo Satus es un booleano: 
         # true indica que reconoció a una persona de la colección y false que no la reconoció                 
-        if imgsids:   
-            updateItemDB(imgsids[0],date,time)
+        if imgsid:   
+            conexion = mysql_start_connection("analitica","analitica123" , 
+    "analitica-ml.cwklrzbxbt5x.us-east-1.rds.amazonaws.com", "reconocimiento", 3306)
 
-        #Si se identifico a la persona en la colección se elimina la imagen del bucket
-        if imgsids:
+            updateItemDB(imgsid,date,time,conexion,similarity,confidence)
+
+            mysql_display(conexion)
+
+            mysql_end_connection(conexion)
+
+        #Si se identificó a la persona en la colección se elimina la imagen del bucket
+        if imgsid:
             deleteObject(bucket,key)
 
 
@@ -219,7 +227,7 @@ def search_faces(image):
     faceMatches = response['FaceMatches']
 
     #Lista con el ExternaImageId de la cara en la colección
-    listface=[]
+    
 
 
     for match in faceMatches:
@@ -230,58 +238,57 @@ def search_faces(image):
 
         #Si la similaridad entre coincidencia es mayor a 80% se agrega el ExternalImageId a la lista listface
         if match['Similarity'] > 80.0:
-            listface.append( match['Face']['ExternalImageId'])
+            faceid = match['Face']['ExternalImageId']
+            similarity = match['Similarity']
+            confidence = match['Face']['Confidence']
 
     #Retorna lista con el ExternalImageId de las coincidencias en la colección
-    return listface
+    return faceid, similarity, confidence
 
 
 #Se define función para actualizar un item de la base de datos de dynamodb
 #Recibe como parámetros el ExternalImageId, la fecha y la hora del item a actualizar
-def updateItemDB(imgId,date,time):
+def updateItemDB(imgId,date,time,conexion,similarity,confidence):
 
-    #Cliente representando servicio dynamodb
-    client = boto3.client('dynamodb')
+    # actualizar datos en la tabla
+    cursorUpdate = conexion.cursor()
+    consultaUpdate = "UPDATE control set fecha='{0}',hora ='{1}',estado='{2}',similaridad='{3}',confianza='{4}  where nombre= '{5}';".format(date,time,True,similarity,confidence,imgId)   
+    
 
+    # Mock values for face ID, image ID, and confidence - replace them with actual values from your collection results
     try:
-
-        #Se actualiza la base de datos cambiando el atributo status con el valor booleano True, 
-        #la fecha y la hora
-        response = client.update_item(
-            TableName='dataset-collection-personal',
-            Key={
-                'Nombre': {
-                    'S': imgId
-                }
-            },
-            AttributeUpdates={
-                'status': {
-                    'Value': {
-                        'BOOL': True
-                    },
-                    'Action': 'PUT'
-                },
-                'Fecha':{
-                    'Value':{
-                        'S': date
-                    },
-                    'Action':'PUT'
-                },
-                'Hora':{
-                    'Value':{
-                        'S':time
-                    },
-                    'Action':'PUT'
-                }
-            },
-
-
-        )   
+        cursorUpdate.execute(consultaUpdate)
+        
 
     except Exception as msg:
 
         print(f"Oops, no se pudo actualizar el item: {msg}")
 
+    conexion.commit()
+    cursorUpdate.close()
+
+def mysql_start_connection(user, password, host, database, port):
+    try:
+        conexion = mysql.connector.connect(user = user, password=password, host = host, database = database, port =port)
+        print("conexion exitosa")
+    except:
+        print("falla en la conexion ")
+
+    return conexion
+
+
+def mysql_display(conexion):
+    cursor = conexion.cursor()
+    cursor.execute("Select * from control;")
+
+    personas = cursor.fetchall()
+    for i in personas:
+        print(i)
+
+    cursor.close()
+
+def mysql_end_connection(conexion):    
+    conexion.close()
 
 #Función para eliminar objetos del bucket
 #La función recibe como parámetros el nombre del bucket y de la imagen
