@@ -64,14 +64,13 @@ def lambda_handler(event, context):
             conexion = mysql_start_connection("analitica","analitica123" , 
     "analitica-ml.cwklrzbxbt5x.us-east-1.rds.amazonaws.com", "reconocimiento", 3306)
 
-            updateItemDB(imgsid,date,time,conexion,similarity,confidence)
+            updateItemDB(imgsid[0],date,time,conexion,similarity,confidence)
 
             mysql_display(conexion)
 
             mysql_end_connection(conexion)
 
-        #Si se identificó a la persona en la colección se elimina la imagen del bucket
-        if imgsid:
+            #Si se identificó a la persona en la colección se elimina la imagen del bucket
             deleteObject(bucket,key)
 
 
@@ -228,7 +227,7 @@ def search_faces(image):
 
     #Lista con el ExternaImageId de la cara en la colección
     
-
+    listface = []
 
     for match in faceMatches:
         print('--------------------\n')
@@ -238,12 +237,12 @@ def search_faces(image):
 
         #Si la similaridad entre coincidencia es mayor a 80% se agrega el ExternalImageId a la lista listface
         if match['Similarity'] > 80.0:
-            faceid = match['Face']['ExternalImageId']
+            listface.append(match['Face']['ExternalImageId'])
             similarity = match['Similarity']
             confidence = match['Face']['Confidence']
 
     #Retorna lista con el ExternalImageId de las coincidencias en la colección
-    return faceid, similarity, confidence
+    return listface, similarity, confidence
 
 
 #Se define función para actualizar un item de la base de datos de dynamodb
