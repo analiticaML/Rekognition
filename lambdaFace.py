@@ -20,6 +20,7 @@ import io
 from PIL import Image
 import datetime
 import mysql.connector
+import math
 
 
 #Se define función principal de ejecución: Función Handler del evento de S3
@@ -64,7 +65,7 @@ def lambda_handler(event, context):
             conexion = mysql_start_connection("analitica","analitica123" , 
     "analitica-ml.cwklrzbxbt5x.us-east-1.rds.amazonaws.com", "reconocimiento", 3306)
 
-            updateItemDB(imgsid[0],date,time,conexion,similarity,confidence)
+            updateItemDB(imgsid[0],str(date),str(time),conexion,similarity[0],confidence[0])
 
             mysql_display(conexion)
 
@@ -152,10 +153,10 @@ def detect_faces(bucket,key):
     for faceDetail in response['FaceDetails']:
     
         box = faceDetail['BoundingBox']
-        left = imgWidth * box['Left']
-        top = imgHeight * box['Top']
-        width = imgWidth * box['Width']
-        height = imgHeight * box['Height']
+        left = imgWidth* box['Left']
+        top =   imgHeight * box['Top']
+        width =  imgWidth * box['Width']
+        height =  imgHeight * box['Height']
 
         #Se agrega al diccionario los límites del bounding box correspondientes a cada cara
         dict['cara'+'{0:.0f}'.format(count)]=[left,top,left+width,top+height]
@@ -197,6 +198,9 @@ def cropFace(image,dict,numCaras,key):
         img_byte_arr = io.BytesIO()
         imagecrop.save(img_byte_arr, format="JPEG")
         img_byte_arr = img_byte_arr.getvalue()
+        
+        prueba = boto3.client("s3")
+        prueba.put_object(Body = img_byte_arr, Key = key +str(i)+".jpg", Bucket ="bucket-prueba-lambda")
 
         #Se agrega a la lista la imagen recortada en bytes
         listaimg.append(img_byte_arr)
@@ -216,55 +220,70 @@ def search_faces(image):
     threshold = 80 #Umbral para similaridad entre caras
     maxFaces = 100 #Número máximo de caras que quiere reconocer de la colección
     
-    #Función del SDK (boto3) de python para buscar coincidencia con caras de una colección
-    response=client.search_faces_by_image(CollectionId=collectionId,
-                                    Image={'Bytes': image},
-                                    FaceMatchThreshold=threshold,
-                                     MaxFaces=maxFaces)
-
-
-    faceMatches = response['FaceMatches']
-
-    #Lista con el ExternaImageId de la cara en la colección
-    
     listface = []
-
-    for match in faceMatches:
-        print('--------------------\n')
-        print('ImageId:' + match['Face']['ImageId'])
-        print('Similarity: ' + "{:.2f}".format(match['Similarity']) + "%")
-        print('Confidence: ' + str(match['Face']['Confidence']))
-
-        #Si la similaridad entre coincidencia es mayor a 80% se agrega el ExternalImageId a la lista listface
-        if match['Similarity'] > 80.0:
-            listface.append(match['Face']['ExternalImageId'])
-            similarity = match['Similarity']
-            confidence = match['Face']['Confidence']
-
-    #Retorna lista con el ExternalImageId de las coincidencias en la colección
-    return listface, similarity, confidence
+    similarity = []
+    confidence = []
+    
+    try:
+        #Función del SDK (boto3) de python para buscar coincidencia con caras de una colección
+        response=client.search_faces_by_image(CollectionId=collectionId,
+                                        Image={'Bytes': image},
+                                        FaceMatchThreshold=threshold,
+                                         MaxFaces=maxFaces)
+        
+        
+        faceMatches = response['FaceMatches']
+        
+            #Lista con el ExternaImageId de la cara en la colección
+            
+        
+        for match in faceMatches:
+            print('--------------------\n')
+            print('ImageId:' + match['Face']['ImageId'])
+            print('Similarity: ' + "{:.2f}".format(match['Similarity']) + "%")
+            print('Confidence: ' + str(match['Face']['Confidence']))
+        
+            #Si la similaridad entre coincidencia es mayor a 80% se agrega el ExternalImageId a la lista listface
+            if match['Similarity'] > 80.0:
+                listface.append(match['Face']['ExternalImageId'])
+                similarity.append(match['Similarity'])
+                confidence.append(match['Face']['Confidence'])
+                    
+        
+            #Retorna lista con el ExternalImageId de las coincidencias en la colección
+        return listface, similarity, confidence
+        
+    except:
+        return listface, similarity, confidence
 
 
 #Se define función para actualizar un item de la base de datos de dynamodb
 #Recibe como parámetros el ExternalImageId, la fecha y la hora del item a actualizar
 def updateItemDB(imgId,date,time,conexion,similarity,confidence):
+    similarity = round(similarity,2)
+    confidence = round(confidence,2)
 
+    print(type(imgId))
+    print(imgId)
     # actualizar datos en la tabla
     cursorUpdate = conexion.cursor()
-    consultaUpdate = "UPDATE control set fecha='{0}',hora ='{1}',estado='{2}',similaridad='{3}',confianza='{4}  where nombre= '{5}';".format(date,time,True,similarity,confidence,imgId)   
     
+    #consultaUpdate = "UPDATE control set fecha='{0}',hora ='{1}',estado='{2}',similaridad='{3}',confianza='{4}  where nombre= '{5}';".format(str(date),str(time),True,similarity,confidence,imgId)   
+    consultaUpdate = "UPDATE control set fecha= '{0}',hora ='{1}',estado='{2}',similaridad='{3}',confianza='{4}' where nombre= '{5}';".format(str(date),str(time),1,float(similarity),float(confidence),imgId)
 
+    
     # Mock values for face ID, image ID, and confidence - replace them with actual values from your collection results
-    try:
-        cursorUpdate.execute(consultaUpdate)
+    #try:
+    cursorUpdate.execute(consultaUpdate)
         
 
-    except Exception as msg:
+    #except Exception as msg:
 
-        print(f"Oops, no se pudo actualizar el item: {msg}")
+    #    print(f"Oops, no se pudo actualizar el item: {msg}")
 
     conexion.commit()
     cursorUpdate.close()
+
 
 def mysql_start_connection(user, password, host, database, port):
     try:
@@ -274,6 +293,8 @@ def mysql_start_connection(user, password, host, database, port):
         print("falla en la conexion ")
 
     return conexion
+
+
 
 
 def mysql_display(conexion):

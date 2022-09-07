@@ -4,13 +4,17 @@ import json
 import mysql.connector
 
 def mysql_start_connection(user, password, host, database, port):
+    
     try:
         conexion = mysql.connector.connect(user = user, password=password, host = host, database = database, port =port)
         print("conexion exitosa")
+
+        return conexion
+
     except:
         print("falla en la conexion ")
 
-    return conexion
+
 
 
 def mysql_display(conexion):
@@ -42,13 +46,17 @@ def create_initial_collection_mysql_db(lista,keys,conexion,bucketName):
                 file_url = "https://s3.amazonaws.com/{}/{}".format(bucketName, key_name)
 
                 def insert_data_mysql(conexion):
+                    print("Se van a insertar los datos")
                     # insertar datos en la tabla
                     cursorInsert = conexion.cursor()
                     faceid = item[0]
+                    print(faceid)
                     nombre = item[2]
+                    print(nombre)
                     url = file_url
+                    print(url)
 
-                    consulta = "INSERT  INTO  collection(faceid, nombre, bucket) VALUES('{0}', '{1}', '{2}');".format(faceid,nombre,url)
+                    consulta = "INSERT  INTO  collection(faceId, nombre, bucket) VALUES('{0}', '{1}', '{2}');".format(faceid,nombre,url)
                     cursorInsert.execute(consulta)
 
                     conexion.commit()
@@ -57,17 +65,19 @@ def create_initial_collection_mysql_db(lista,keys,conexion,bucketName):
                 # Mock values for face ID, image ID, and confidence - replace them with actual values from your collection results
                 try:
                     insert_data_mysql(conexion)
+
+                    print("Se agrego exitosamente los datos de la collection a RDS collection table")
                 except:
                     print("El usuario ya se encuentra en la tabla")
                 
-    print("Se agrego exitosamente los datos de la collection a RDS collection table")
+    
 
 # la funcion list_faces_in_collection retorna una lista con la información de cada
 # cara en la collection
 #  
 def list_faces_in_collection(collection_id):
 
-
+    lista=[]
     maxResults=1
     faces_count=0
     tokens=True
@@ -82,7 +92,6 @@ def list_faces_in_collection(collection_id):
     # creamos un ciclo para recorrer la lista de los json 
     while tokens:
 
-        lista=[]
         list1 = []
         faces=response['Faces']
 
@@ -135,15 +144,19 @@ def main():
 
 
     lista,faces_count = list_faces_in_collection(collection_id)
+    print(lista)
     keys = list_Objects_from_Bucket(bucketName)
+    print(keys)
 
     print("faces count: " + str(faces_count))
 
     conexion = mysql_start_connection("analitica","analitica123" , 
-    "analitica-ml.cwklrzbxbtx.us-east-1.rds.amazonaws.com", "collection", 3306)
+    "analitica-ml.cwklrzbxbt5x.us-east-1.rds.amazonaws.com", "reconocimiento", 3306)
 
+    print("Se incia la creación de la base de datos")
     create_initial_collection_mysql_db(lista,keys,conexion,bucketName)
 
+    print("se creó la base de datos")
     mysql_display(conexion)
 
     mysql_end_connection(conexion)
