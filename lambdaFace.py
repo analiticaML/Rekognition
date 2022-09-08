@@ -67,6 +67,8 @@ def lambda_handler(event, context):
 
             updateItemDB(imgsid[0],str(date),str(time),conexion,similarity[0],confidence[0])
 
+            createRegister(conexion,imgsid[0],str(date),str(time))
+
             mysql_display(conexion)
 
             mysql_end_connection(conexion)
@@ -269,7 +271,7 @@ def updateItemDB(imgId,date,time,conexion,similarity,confidence):
     cursorUpdate = conexion.cursor()
     
     #consultaUpdate = "UPDATE control set fecha='{0}',hora ='{1}',estado='{2}',similaridad='{3}',confianza='{4}  where nombre= '{5}';".format(str(date),str(time),True,similarity,confidence,imgId)   
-    consultaUpdate = "UPDATE control set fecha= '{0}',hora ='{1}',estado='{2}',similaridad='{3}',confianza='{4}' where nombre= '{5}';".format(str(date),str(time),1,float(similarity),float(confidence),imgId)
+    consultaUpdate = "UPDATE control set fecha= '{0}',hora ='{1}',estado='{2}',similaridad='{3}',confianza='{4}' where nombre= '{5}';".format(date,time,1,similarity,confidence,imgId)
 
     
     # Mock values for face ID, image ID, and confidence - replace them with actual values from your collection results
@@ -317,3 +319,21 @@ def deleteObject(bucket, key):
     #Cliente representando servicio dynamodb
     s3 = boto3.resource('s3')
     s3.Object(bucket, key).delete()
+
+def createRegister(conexion,imgsid,date,time):
+                    # insertar datos en la tabla
+                    cursorInsert = conexion.cursor()
+
+                    nombre = imgsid
+                    fecha = date
+                    hora = time
+
+                    consulta = "INSERT  INTO  registro(nombre, fecha, hora) VALUES('{0}', '{1}', '{2}');".format(nombre,
+                     fecha, hora)
+
+                    
+                    cursorInsert.execute(consulta)
+
+                    conexion.commit()
+                    cursorInsert.close()
+
