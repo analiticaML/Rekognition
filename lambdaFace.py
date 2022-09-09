@@ -168,6 +168,10 @@ def detect_faces(bucket,key):
 
     #Número de caras detectadas en la imagen
     numCaras=len(response['FaceDetails'])
+
+    #Si no se encuentra ninguna cara en la imagen, se borra la imagen del bucket.
+    if numCaras==0:
+        deleteObject(bucket,key)
   
     #Retorna diccionario con los límites del bounding box para cada cara, el número de caras detectadas
     #y la imagen tipo PIL
@@ -270,7 +274,6 @@ def updateItemDB(imgId,date,time,conexion,similarity,confidence):
     # actualizar datos en la tabla
     cursorUpdate = conexion.cursor()
     
-    #consultaUpdate = "UPDATE control set fecha='{0}',hora ='{1}',estado='{2}',similaridad='{3}',confianza='{4}  where nombre= '{5}';".format(str(date),str(time),True,similarity,confidence,imgId)   
     consultaUpdate = "UPDATE control set fecha= '{0}',hora ='{1}',estado='{2}',similaridad='{3}',confianza='{4}' where nombre= '{5}';".format(date,time,1,similarity,confidence,imgId)
 
     
