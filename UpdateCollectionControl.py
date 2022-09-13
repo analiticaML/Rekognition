@@ -12,31 +12,34 @@ import mysql.connector
 #recibe como parametro la imagen, el nombre de la imagen, la collection_id 
 #donde se desea agregar la cara y la region de aws
 
-def add_faces_to_collection(collection_id, region,path):
-    diccionario ={}
+def add_faces_to_collection(collection_id, region,path,control):
+
     fpath = os.listdir(path)
-    for images in fpath:
+    # se crea una dos ciclos for para recorrer el path del local y cada directorio en el, donde se encuentran las imagenes
+    for folder in fpath:
+        path_folders =  path +'\\' + folder
+        fpath_folders = os.listdir(path_folders)
+        if folder not in control:
+            for images in fpath_folders:
 
-        file_image = r''+ path + '\\'+ images
-        photo_name = path.split('\\')[-1]
-    
-        # Se llama al cliente de rekognition en la region indicada 
-        client = boto3.client('rekognition', region_name=region)
+                file_image = r''+path + '\\'+ folder + '\\'+ images
+                photo_name = folder
+            
+                # Se llama al cliente de rekognition en la region indicada 
+                client = boto3.client('rekognition', region_name=region)
 
-        #Abrimos la imagen 
-        imageTarget = open(file_image, 'rb')
-        
-        # con la funcion index_faces agregamos la imagen en bytes a la collection indicada
-        response = client.index_faces(CollectionId=collection_id,
-            Image={'Bytes': imageTarget.read()},
-            ExternalImageId=photo_name,
-            MaxFaces=1,
-            QualityFilter="AUTO")
-        
-        #Creamos un diccionario con el FaceId de la persona indexada y valor de path de imagen
-        diccionario[response['FaceRecords'][0]['Face']['FaceId']] = images
-
-    return diccionario
+                #Abrimos la imagen 
+                imageTarget = open(file_image, 'rb')
+                
+                # con la funcion index_faces agregamos la imagen en bytes a la collection indicada
+                response = client.index_faces(CollectionId=collection_id,
+                    Image={'Bytes': imageTarget.read()},
+                    ExternalImageId=photo_name,
+                    MaxFaces=1,
+                    QualityFilter="AUTO")
+                
+                #Creamos un diccionario con el FaceId de la persona indexada y valor de path de imagen
+           
     
 
 
@@ -46,7 +49,6 @@ def add_faces_to_collection(collection_id, region,path):
 def list_faces_in_collection(collection_id):
     lista = []
     maxResults=1
-    faces_count=0
     tokens=True
 
     # se invoca el cliente de amazon rekognition
@@ -71,7 +73,6 @@ def list_faces_in_collection(collection_id):
             lista.append(list1)
             list1.clear
 
-            faces_count+=1
         if 'NextToken' in response:
             nextToken=response['NextToken']
 
@@ -82,22 +83,24 @@ def list_faces_in_collection(collection_id):
     return lista
 # se recorre el path del local y los directorios donde estan las imagenes en dos ciclos 
 # para subir imagen por imagen al bucket de s3
-def put_folder_s3(region,path,bucket):
+def put_folder_s3(region,path,bucket,control):
     fpath = os.listdir(path)
-    for images in fpath:
-        file_name = r''+path + '\\'+ images
-        # store local file in S3 bucket
-        external_image = path.split('\\')[-1]
-        key_name = external_image+'/'+ images
-
-        # se llama al cliente de s3 
-        s3 = boto3.client('s3', region_name=region)
-        # Upload the file
-        try:
-            #La función upload_file actualiza y sube la imagen al bucket
-            s3.upload_file(file_name, bucket, key_name)
-        except ClientError as e:
-            logging.error(e)
+    # se crea una dos ciclos for para recorrer el path del local y cada directorio en el, donde se encuentran las imagenes
+    for folder in fpath:
+        path_folders =  path +'\\' + folder
+        fpath_folders = os.listdir(path_folders)
+        if folder not in control:
+            for images in fpath_folders:
+                file_image = r''+path + '\\'+ folder + '\\'+ images
+                key_name = folder+'/'+ images
+                # se llama al cliente de s3 
+                s3 = boto3.client('s3', region_name=region)
+                # Upload the file
+                try:
+                    #La función upload_file actualiza y sube la imagen al bucket
+                    s3.upload_file(file_image, bucket, key_name)
+                except ClientError as e:
+                    logging.error(e)
 
 def list_Objects_from_Bucket(bucketName):
     # se invoca el servicio de amazon s3
@@ -164,7 +167,7 @@ def insert_data_mysql_control(conexion,item):
                     cursorInsert = conexion.cursor()
                     nombre = item[2]
                     print(nombre)
-                    consulta = "INSERT  INTO  control(nombre, fecha, hora,estado,similaridad, confianza) VALUES('{0}', '{1}', '{2}','{3}','{4}','{5}');".format(nombre,"0","0",0,0,0)
+                    consulta = "INSERT  INTO  control(nombre, fecha, hora,estado,similaridad, confianza) VALUES('{0}', '{1}', '{2}','{3}','{4}','{5}');".format(nombre,"0000-00-00","00:00:00",0,0.00,0.00)
                     cursorInsert.execute(consulta)
 
                     conexion.commit()
@@ -183,31 +186,47 @@ def create_initial_collection_mysql_db(lista,keys,conexion,bucketName):
                 # Get URL of file
                 file_url = "https://s3.amazonaws.com/{}/{}".format(bucketName, key_name)
                 # Mock values for face ID, image ID, and confidence - replace them with actual values from your collection results
-                insert_data_mysql_control(conexion,item)
+                try:
+                    insert_data_mysql_control(conexion,item)
+                except:
+                    print("ya esta en control")
                 try:
                     insert_data_mysql_collection(conexion,item,file_url)
                     print("Se agrego exitosamente los datos de la collection a RDS collection table")
                 except:
                     print("El usuario ya se encuentra en la tabla")
+def mysql_members(conexion):
+    lista =[]
+    cursor = conexion.cursor()
+
+    cursor.execute("Select * from control;")
+
+    personas = cursor.fetchall()
+    for i in personas:
+        lista.append(i[0])
+    cursor.close()
+
+    return(lista)
 
 def main():
     #En este caso agregamos las imagenes desde el path del local 
-    path =r'C:\Users\user\Desktop\collection\Marrugo'
+    path =r'C:\Users\user\Desktop\collection'
     collection_id='collection-rekognition'
     region = "us-east-1"
-    bucket = "prueba-bucket-machine"
+    bucket = "fotos-collection-rekognition"
 
+    conexion = mysql_start_connection("analitica","analitica123" , 
+    "analitica-ml.cwklrzbxbt5x.us-east-1.rds.amazonaws.com", "reconocimiento", 3306)
 
-    add_faces_to_collection( collection_id, region,path)
+    lista = mysql_members(conexion)
+
+    add_faces_to_collection( collection_id, region,path,lista)
 
     lista_collection = list_faces_in_collection(collection_id)
 
     put_folder_s3(region,path,bucket)
 
     keys = list_Objects_from_Bucket(bucket)
-
-    conexion = mysql_start_connection("analitica","analitica123" , 
-    "analitica-ml.cwklrzbxbt5x.us-east-1.rds.amazonaws.com", "reconocimiento", 3306)
 
     create_initial_collection_mysql_db(lista_collection,keys,conexion,bucket)
 
