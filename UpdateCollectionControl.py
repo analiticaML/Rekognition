@@ -37,6 +37,7 @@ def add_faces_to_collection(collection_id, region,path,control):
                     ExternalImageId=photo_name,
                     MaxFaces=1,
                     QualityFilter="AUTO")
+        print("Se agrego correctamente "+folder + " en la collection")
                 
                 #Creamos un diccionario con el FaceId de la persona indexada y valor de path de imagen
            
