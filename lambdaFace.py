@@ -18,9 +18,11 @@ import boto3
 import urllib
 import io
 from PIL import Image
-import datetime
+import datetime 
 import mysql.connector
 import math
+import time
+from datetime import datetime as dt
 
 
 #Se define función principal de ejecución: Función Handler del evento de S3
@@ -35,6 +37,9 @@ def lambda_handler(event, context):
     bucket = event['Records'][0]['s3']['bucket']['name']
     key = urllib.parse.unquote_plus(event['Records'][0]['s3']['object']['key'], encoding='utf-8')
 
+    #Función para obtener la fecha y la horas de la modificación de un objeto en un bucket 
+    date,time=objectDate(bucket,key)
+
     #Función para detectar caras:
     #Se obtiene de la función detec_faces un diccionario con los limites del bounding box de cada cara detectada
     #El número de caras detectadas y la imagen tipo PIL a analizar
@@ -47,8 +52,6 @@ def lambda_handler(event, context):
     #Se obtiene de la función una lista con las imagenes de las caras de cada una de las personas en la imagen
     listaimg=cropFace(image,dictionary,num,key)
 
-    #Función para obtener la fecha y la horas de la modificación de un objeto en un bucket 
-    date,time=objectDate(bucket,key)
 
     #Se recorren todas las caras de las personas identificadas en la captura.
     for image in listaimg:
@@ -74,6 +77,7 @@ def lambda_handler(event, context):
 
             #Se llama la función para obtener diferencia de tiempos entre capturas para una misma persona
             delta = timeDifference(conexion,time,imgsid[0])
+            print(delta)
 
             #Si la diferencia entre capturas es mayor a cinco segundo se crea un registro
             if delta > 5:
@@ -234,7 +238,7 @@ def search_faces(image):
     client=boto3.client('rekognition', 'us-east-1')
 
 
-    collectionId = 'collection-rekognition' #Nombre de la colección
+    collectionId = 'collection-telemetrik' #Nombre de la colección
     threshold = 80 #Umbral para similaridad entre caras
     maxFaces = 100 #Número máximo de caras que quiere reconocer de la colección
     
@@ -370,31 +374,35 @@ def timeDifference(conexion, endTime,nombre):
     
     try:
         #Se selecciona de la tabla de registro los registros de la persona seleccionada
-        sql_select_Query = "select * from registro where nombre = %s"
+        sql_select_Query = "select hora from registro where nombre = '{0}'".format(nombre)
 
         cursor = conexion.cursor()
-        cursor.execute(sql_select_Query,nombre)
+        cursor.execute(sql_select_Query)
 
         #Se guardan todos los registros en una lista
         records = cursor.fetchall()
 
         #Número de registro de la persona
         numberRow = cursor.rowcount
-        
+     
         #Se obtiene la hora del  último registro de la persona
         startTime = records[numberRow-1]
 
         #Se convierte la hora de string a formate datetime
-        t1 = datetime.strptime(startTime, "%H:%M:%S")
-        t2 = datetime.strptime(endTime, "%H:%M:%S")
+        t1 = dt.strptime(startTime[0], "%H:%M:%S")
+        t2 = dt.strptime(endTime, "%H:%M:%S")
+        print(t1)
+        print(t2)
 
         #Se obtiene la diferencia de los dos tiempos
         delta = t2 - t1
         
         cursor.close()
 
-        #La función retorna la diferencia de los dos tiempos
-        return delta
+        dif = delta.total_seconds() #Se pasa la diferencia a segundos
+
+        #La función retorna la diferencia de los dos tiempos en segundos
+        return dif
 
     except:
         #Se retorna un valor de 6 para que si la persona no tiene aún ningún resgistro en la tabla registros
