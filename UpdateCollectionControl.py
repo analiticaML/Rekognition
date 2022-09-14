@@ -173,28 +173,29 @@ def insert_data_mysql_control(conexion,item):
                     conexion.commit()
                     cursorInsert.close()
 
-def create_initial_collection_mysql_db(lista,keys,conexion,bucketName):
+def create_initial_collection_mysql_db(lista,keys,conexion,bucketName,control):
 
     # la lista creada en la descripcion de las caras en la collection y los paths en la lista keys se recorren
     # y se emparejan los faceId de cada cara con la imagen en el bucket
     for item in lista:
-        for key in keys:
-            #sabemos que en ambas lista coincide el nombre de la carpeta en el bucket con el ExternalImageId de lista
-            list = key.split('/')
-            if list[0]==item[2]:
-                key_name = key
-                # Get URL of file
-                file_url = "https://s3.amazonaws.com/{}/{}".format(bucketName, key_name)
-                # Mock values for face ID, image ID, and confidence - replace them with actual values from your collection results
-                try:
-                    insert_data_mysql_control(conexion,item)
-                except:
-                    print("ya esta en control")
-                try:
-                    insert_data_mysql_collection(conexion,item,file_url)
-                    print("Se agrego exitosamente los datos de la collection a RDS collection table")
-                except:
-                    print("El usuario ya se encuentra en la tabla")
+        if item[2] not in control:
+            for key in keys:
+                #sabemos que en ambas lista coincide el nombre de la carpeta en el bucket con el ExternalImageId de lista
+                list = key.split('/')
+                if list[0]==item[2]:
+                    key_name = key
+                    # Get URL of file
+                    file_url = "https://s3.amazonaws.com/{}/{}".format(bucketName, key_name)
+                    # Mock values for face ID, image ID, and confidence - replace them with actual values from your collection results
+                    try:
+                        insert_data_mysql_control(conexion,item)
+                    except:
+                        print("ya esta en control")
+                    try:
+                        insert_data_mysql_collection(conexion,item,file_url)
+                        print("Se agrego exitosamente los datos de la collection a RDS collection table")
+                    except:
+                        print("El usuario ya se encuentra en la tabla")
 def mysql_members(conexion):
     lista =[]
     cursor = conexion.cursor()
@@ -224,11 +225,11 @@ def main():
 
     lista_collection = list_faces_in_collection(collection_id)
 
-    put_folder_s3(region,path,bucket)
+    put_folder_s3(region,path,bucket,lista)
 
     keys = list_Objects_from_Bucket(bucket)
 
-    create_initial_collection_mysql_db(lista_collection,keys,conexion,bucket)
+    create_initial_collection_mysql_db(lista_collection,keys,conexion,bucket,lista)
 
     mysql_display(conexion)
 
