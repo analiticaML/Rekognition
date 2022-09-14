@@ -4,8 +4,8 @@ Función lambda: lambdaFace
     Función disparada con evento de S3 (subir imagen a un bucket asociado a la función) 
     Se toma del evento el nombre del bucket y de la imagen subida. 
     Realiza reconocimiento de una o varias persona de acuerdo a la coincidencia con las imagenes en una colección.
-    Se actualiza el atributo status de una tabla en dynamodb con booleano indicando el resultado de la coincidencia.
-    (True: La persona en la colección fue reconocida, False: La persona en la colección no fue reconocida).
+    Se actualiza el atributo status, fecha y hora de una tabla en mysql con valor binario indicando el resultado de la coincidencia.
+    (1: La persona en la colección fue reconocida, 0: La persona en la colección no fue reconocida).
 
 '''
 
@@ -40,6 +40,7 @@ def lambda_handler(event, context):
     #El número de caras detectadas y la imagen tipo PIL a analizar
     dictionary, num, image= detect_faces(bucket,key)
 
+    #Número de personas identificadas en la imagen
     print('número de personas: ' + '{0:.0f}'.format(num) + '\n')
 
     #Función para recortar las caras de las personas en una imagen:
@@ -49,28 +50,41 @@ def lambda_handler(event, context):
     #Función para obtener la fecha y la horas de la modificación de un objeto en un bucket 
     date,time=objectDate(bucket,key)
 
-
+    #Se recorren todas las caras de las personas identificadas en la captura.
     for image in listaimg:
 
         #Se busca si la persona esta en una collection
-        #Retorna una lista con el ExternalImageId de las coincidencias en la colección
+        #Retorna una lista con el ExternalImageId de las coincidencias en la colección,
+        #lista con las similaridades y lista con las confianzas de las coincidencias. 
         imgsid, similarity, confidence = search_faces(image)
 
-        # Si se encuentra una persona de la base de datos
-        #Se actualizan los atributos status, Fecha y Hora en la base de datos en DynamoDB de acuerdo 
-        #al resultado de la función search_faces para cada una de las coincidencias en la collection
-        # El valor del atributo Satus es un booleano: 
-        # true indica que reconoció a una persona de la colección y false que no la reconoció                 
-        if imgsid:   
-            conexion = mysql_start_connection("analitica","analitica123" , 
-    "analitica-ml.cwklrzbxbt5x.us-east-1.rds.amazonaws.com", "reconocimiento", 3306)
+        #Si se encuentra una coincidencia con la colección
+        #Se actualizan los atributos status, Fecha y Hora en la base de datos de mysql de acuerdo 
+        #al resultado de la función search_faces para cada una de las coincidencias en la collection.
+        #El valor del atributo Satus es un valor binario: 
+        #1 indica que reconoció a una persona de la colección y 0 que no la reconoció                 
+        if imgsid:
 
+            #Se llama la función para establecer conexión con la base de datos en mysql   
+            conexion = mysql_start_connection("analitica","analitica123" , 
+            "analitica-ml.cwklrzbxbt5x.us-east-1.rds.amazonaws.com", "reconocimiento", 3306)
+
+            #Se llama la función para actualizar un item de la base de datos
             updateItemDB(imgsid[0],str(date),str(time),conexion,similarity[0],confidence[0])
 
-            createRegister(conexion,imgsid[0],str(date),str(time))
+            #Se llama la función para obtener diferencia de tiempos entre capturas para una misma persona
+            delta = timeDifference(conexion,time,imgsid[0])
 
-            mysql_display(conexion)
+            #Si la diferencia entre capturas es mayor a cinco segundo se crea un registro
+            if delta > 5:
 
+                #Se llama función para crear un item en la tabla de registro de la base de datos de mysql
+                createRegister(conexion,imgsid[0],str(date),str(time))
+
+            #Se llama función para desplegar en pantalla una tabla de la base de datos de mysql
+            #mysql_display(conexion)
+
+            #Se llama función para terminar la conexión
             mysql_end_connection(conexion)
 
             #Si se identificó a la persona en la colección se elimina la imagen del bucket
@@ -86,9 +100,10 @@ def objectDate(bucket,key):
 
     #Función del SDK (boto3) de python para obtener información de un objeto de un bucket en s3
     response = client.head_object(Bucket=bucket, Key=key)
-    datetime_value = str(response["LastModified"])
+    #String con fecha,hora e identificador de zona horaria de la última modificación del objeto en s3
+    datetime_value = str(response["LastModified"]) 
 
-    #Se elimina la zona horaria (UTC)
+    #Se elimina del string el identificador de la zona horaria (UTC)
     time=datetime_value[0:len(datetime_value)-6]
 
     #Se convierte string en formato datetime y se actualiza la hora de acuerdo a la zona horaria
@@ -101,8 +116,9 @@ def objectDate(bucket,key):
     #Se convierte nuevamente a string
     result_utc_datetime=str(result_utc_datetime)
 
-
+    #Se selecciona la fecha del string completo 
     fecha=result_utc_datetime[0:len(result_utc_datetime)-9]
+    #Se selecciona la hora del string completo
     hora=result_utc_datetime[11:len(result_utc_datetime)]
 
     #Retorna strings con la fecha y la hora de la última modificación del objeto en s3
@@ -129,8 +145,7 @@ def detect_faces(bucket,key):
             + ' and ' + str(faceDetail['AgeRange']['High']) + ' years old')
 
 
-
-    # Se carga imagen de un bucket S3
+    #Se carga imagen de un bucket S3
     s3_connection = boto3.resource('s3')
     s3_object = s3_connection.Object(bucket,key)
     s3_response = s3_object.get()
@@ -197,7 +212,7 @@ def cropFace(image,dict,numCaras,key):
         dimensiones=dict['cara'+"{0:.0f}".format(i)]
         dim=(int(dimensiones[0]),int(dimensiones[1]),int(dimensiones[2]),int(dimensiones[3]))
 
-        #Se rocarte la imagen de acuerdo a las dimensiones del bounding box
+        #Se recorta la imagen de acuerdo a las dimensiones del bounding box
         imagecrop=image.crop(dim)
 
         #Se convierte la imagen recortada tipo PIL a una imagen en bytes con extensión JPEG
@@ -205,9 +220,6 @@ def cropFace(image,dict,numCaras,key):
         imagecrop.save(img_byte_arr, format="JPEG")
         img_byte_arr = img_byte_arr.getvalue()
         
-        prueba = boto3.client("s3")
-        prueba.put_object(Body = img_byte_arr, Key = key +str(i)+".jpg", Bucket ="bucket-prueba-lambda")
-
         #Se agrega a la lista la imagen recortada en bytes
         listaimg.append(img_byte_arr)
 
@@ -226,7 +238,7 @@ def search_faces(image):
     threshold = 80 #Umbral para similaridad entre caras
     maxFaces = 100 #Número máximo de caras que quiere reconocer de la colección
     
-    listface = []
+    listface = [] 
     similarity = []
     confidence = []
     
@@ -236,12 +248,8 @@ def search_faces(image):
                                         Image={'Bytes': image},
                                         FaceMatchThreshold=threshold,
                                          MaxFaces=maxFaces)
-        
-        
-        faceMatches = response['FaceMatches']
-        
-            #Lista con el ExternaImageId de la cara en la colección
-            
+                
+        faceMatches = response['FaceMatches']            
         
         for match in faceMatches:
             print('--------------------\n')
@@ -249,69 +257,82 @@ def search_faces(image):
             print('Similarity: ' + "{:.2f}".format(match['Similarity']) + "%")
             print('Confidence: ' + str(match['Face']['Confidence']))
         
-            #Si la similaridad entre coincidencia es mayor a 80% se agrega el ExternalImageId a la lista listface
+            #Si la similaridad entre coincidencia es mayor a 80% se agrega el ExternalImageId a la lista listface,
+            #se agrega a la lista similarity la similaridad de la coincidencia y a la lista  confidence la 
+            #confianza con la que se hizo la coincidencia
             if match['Similarity'] > 80.0:
                 listface.append(match['Face']['ExternalImageId'])
                 similarity.append(match['Similarity'])
                 confidence.append(match['Face']['Confidence'])
                     
         
-            #Retorna lista con el ExternalImageId de las coincidencias en la colección
+        #Retorna lista con el ExternalImageId de las coincidencias en la colección
+        #lista con las similaridades y con las confianzas de las coincidencias para cada imagen de la colección
         return listface, similarity, confidence
         
     except:
+        #Retorna listas vacías
         return listface, similarity, confidence
 
 
-#Se define función para actualizar un item de la base de datos de dynamodb
-#Recibe como parámetros el ExternalImageId, la fecha y la hora del item a actualizar
+#Se define función para actualizar un item de la base de datos de mysql
+#Recibe como parámetros el ExternalImageId, la fecha, la hora, la similaridad y la confianza del item a actualizar
 def updateItemDB(imgId,date,time,conexion,similarity,confidence):
     similarity = round(similarity,2)
     confidence = round(confidence,2)
 
-    print(type(imgId))
-    print(imgId)
-    # actualizar datos en la tabla
+    #Establecer conexión con mysql
     cursorUpdate = conexion.cursor()
     
+    #query para actualización de la tabla de control para las columnas
+    #fecha, hora, estado = 1, similaridad y confianza de la persona identificada, 
+    #indicando que la persona a sido identificada.
     consultaUpdate = "UPDATE control set fecha= '{0}',hora ='{1}',estado='{2}',similaridad='{3}',confianza='{4}' where nombre= '{5}';".format(date,time,1,similarity,confidence,imgId)
 
-    
-    # Mock values for face ID, image ID, and confidence - replace them with actual values from your collection results
-    #try:
-    cursorUpdate.execute(consultaUpdate)
+    try:
+        #Se ejecuta la actualización
+        cursorUpdate.execute(consultaUpdate) #Se realiza la actualización
         
+    except Exception as msg:
 
-    #except Exception as msg:
+        print(f"Oops, no se pudo actualizar el item: {msg}")
 
-    #    print(f"Oops, no se pudo actualizar el item: {msg}")
-
+    #Se termina la actualización
     conexion.commit()
     cursorUpdate.close()
 
-
+#Función para conectar con una base de datos de mysql
+#Recibe como parámetros el usuario, la contraseña, el host, el nombre de la base de datos
+#y el puerto de la base de datos de mysql
 def mysql_start_connection(user, password, host, database, port):
     try:
+        #Se establece la conexión ingresando los parámetros de la base de datos de mysql
         conexion = mysql.connector.connect(user = user, password=password, host = host, database = database, port =port)
         print("conexion exitosa")
     except:
         print("falla en la conexion ")
-
+    #Retorna la conexión establecida con la base de datos
     return conexion
 
 
 
-
+#Función para desplegar la tabla en terminal
+#Recibe la conexión inicial con la base de datos de mysql
 def mysql_display(conexion):
+
+    #Se seleccionan todos los items de la tabla
     cursor = conexion.cursor()
     cursor.execute("Select * from control;")
 
+    #Se crea una lista con las filas de la tabla
     personas = cursor.fetchall()
     for i in personas:
         print(i)
 
     cursor.close()
 
+#Función para terminar la conexión con la base de datos de mysql
+#Recibe la conexión inicial con la base de datos de mysql
 def mysql_end_connection(conexion):    
     conexion.close()
 
@@ -319,24 +340,63 @@ def mysql_end_connection(conexion):
 #La función recibe como parámetros el nombre del bucket y de la imagen
 def deleteObject(bucket, key):
 
-    #Cliente representando servicio dynamodb
+    #Cliente representando servicio de s3
     s3 = boto3.resource('s3')
     s3.Object(bucket, key).delete()
 
+#Función para crear un nuevo item en la tabla de registro en mysql
 def createRegister(conexion,imgsid,date,time):
-                    # insertar datos en la tabla
+
                     cursorInsert = conexion.cursor()
 
-                    nombre = imgsid
-                    fecha = date
-                    hora = time
+                    nombre = imgsid #nombre de la persona identificada en la collection
+                    fecha = date #Fecha de la última actualización de la imagen
+                    hora = time #hora de la última actualización de la 
 
+                    #Query para inserta item con nombre, fecha y hora en la tabla registro.
                     consulta = "INSERT  INTO  registro(nombre, fecha, hora) VALUES('{0}', '{1}', '{2}');".format(nombre,
                      fecha, hora)
 
-                    
+                    #Realizar insert
                     cursorInsert.execute(consulta)
 
                     conexion.commit()
                     cursorInsert.close()
 
+#Función  para obtener la diferencia de tiempo entre dos captura de una misma persona
+#La función recibe como parámetros la conexión con la base de datos de mysql, el tiempo de la captura actual
+#y el nombre de la persona detectada en la captura
+def timeDifference(conexion, endTime,nombre):
+    
+    try:
+        #Se selecciona de la tabla de registro los registros de la persona seleccionada
+        sql_select_Query = "select * from registro where nombre = %s"
+
+        cursor = conexion.cursor()
+        cursor.execute(sql_select_Query,nombre)
+
+        #Se guardan todos los registros en una lista
+        records = cursor.fetchall()
+
+        #Número de registro de la persona
+        numberRow = cursor.rowcount
+        
+        #Se obtiene la hora del  último registro de la persona
+        startTime = records[numberRow-1]
+
+        #Se convierte la hora de string a formate datetime
+        t1 = datetime.strptime(startTime, "%H:%M:%S")
+        t2 = datetime.strptime(endTime, "%H:%M:%S")
+
+        #Se obtiene la diferencia de los dos tiempos
+        delta = t2 - t1
+        
+        cursor.close()
+
+        #La función retorna la diferencia de los dos tiempos
+        return delta
+
+    except:
+        #Se retorna un valor de 6 para que si la persona no tiene aún ningún resgistro en la tabla registros
+        #Se agrege el registro como registro inicial
+        return 6 
