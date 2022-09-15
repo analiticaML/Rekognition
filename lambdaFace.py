@@ -25,7 +25,11 @@ import json
 import base64
 from PIL import ExifTags
 
-
+#Variables globales estáticas
+#Cliente representando servicio de aws
+s3_client=boto3.client('s3')
+rekognition_client=boto3.client('rekognition', 'us-east-1')
+lambda_client = boto3.client('lambda')
 
 #Se define función principal de ejecución: Función Handler del evento de S3
 def lambda_handler(event, context):
@@ -70,27 +74,12 @@ def lambda_handler(event, context):
         #1 indica que reconoció a una persona de la colección y 0 que no la reconoció                 
         if imgsid:
 
-            #Se llama la función para establecer conexión con la base de datos en mysql   
-            conexion = mysql_start_connection("analitica","analitica123" , 
-            "analitica-ml.cwklrzbxbt5x.us-east-1.rds.amazonaws.com", "reconocimiento", 3306)
-
-            #Se llama la función para actualizar un item de la base de datos
-            updateItemDB(imgsid[0],str(date),str(time),conexion,similarity[0],confidence[0])
-
-            #Se llama la función para obtener diferencia de tiempos entre capturas para una misma persona
-            delta = timeDifference(conexion,time,imgsid[0],date)
-
-            #Si la diferencia entre capturas es mayor a cinco segundo se crea un registro
-            if delta > 5:
-
-                #Se llama función para crear un item en la tabla de registro de la base de datos de mysql
-                createRegister(conexion,imgsid[0],str(date),str(time))
-
-            #Se llama función para desplegar en pantalla una tabla de la base de datos de mysql
-            #mysql_display(conexion)
-
-            #Se llama función para terminar la conexión
-            mysql_end_connection(conexion)
+            lambda_payload = {"nombre":imgsid[0],"date":str(date),"time":str(time),
+            "similarity":similarity[0],"confidence":confidence[0]}
+            lambda_payload = json.dumps(lambda_payload)
+            lambda_client.invoke(FunctionName='lambdaMysql', 
+            InvocationType='Event',
+            Payload=lambda_payload)
 
             #Si se identificó a la persona en la colección se elimina la imagen del bucket
             deleteObject(bucket,key)
@@ -110,22 +99,6 @@ def mysql_start_connection(user, password, host, database, port):
     return conexion
 
 
-
-#Función para desplegar la tabla en terminal
-#Recibe la conexión inicial con la base de datos de mysql
-def mysql_display(conexion):
-
-    #Se seleccionan todos los items de la tabla
-    cursor = conexion.cursor()
-    cursor.execute("Select * from control;")
-
-    #Se crea una lista con las filas de la tabla
-    personas = cursor.fetchall()
-    for i in personas:
-        print(i)
-
-    cursor.close()
-
 #Función para terminar la conexión con la base de datos de mysql
 #Recibe la conexión inicial con la base de datos de mysql
 def mysql_end_connection(conexion):    
@@ -136,11 +109,8 @@ def mysql_end_connection(conexion):
 #Recibe como parámetro el nombre del bucket y de la imagen
 def objectDate(bucket,key):
 
-    #Cliente representando servicio de s3
-    client=boto3.client('s3')
-
     #Función del SDK (boto3) de python para obtener información de un objeto de un bucket en s3
-    response = client.head_object(Bucket=bucket, Key=key)
+    response = s3_client.head_object(Bucket=bucket, Key=key)
     #String con fecha,hora e identificador de zona horaria de la última modificación del objeto en s3
     datetime_value = str(response["LastModified"]) 
 
@@ -186,11 +156,8 @@ def detect_faces(bucket,key):
     #Se llama la función de cambio de ortientación a la imagen
     image = setOrientationImage(image)
     
-    #Cliente representando servicio de rekognition
-    client=boto3.client('rekognition', 'us-east-1')
-    
     #Función del SDK (boto3) de python para detectar caras en una colección
-    response = client.detect_faces(Image={'S3Object': {'Bucket': bucket, 'Name': key}},
+    response = rekognition_client.detect_faces(Image={'S3Object': {'Bucket': bucket, 'Name': key}},
         Attributes=['ALL'])
 
     print('Detected faces for ' + key)   
@@ -275,9 +242,6 @@ def cropFace(image,dict,numCaras,key):
 #Recibe como parámetros la imagen de cada una de las caras presentes en la imagen
 def search_faces(image):
 
-    #Cliente representando servicio de rekognition
-    client=boto3.client('rekognition', 'us-east-1')
-
 
     collectionId = 'collection-telemetrik' #Nombre de la colección
     threshold = 80 #Umbral para similaridad entre caras
@@ -289,7 +253,7 @@ def search_faces(image):
     
     try:
         #Función del SDK (boto3) de python para buscar coincidencia con caras de una colección
-        response=client.search_faces_by_image(CollectionId=collectionId,
+        response=rekognition_client.search_faces_by_image(CollectionId=collectionId,
                                         Image={'Bytes': image},
                                         FaceMatchThreshold=threshold,
                                          MaxFaces=maxFaces)
@@ -326,8 +290,6 @@ def search_faces(image):
             mysql_end_connection(conexion)
     
     
-    
-            lambda_client = boto3.client('lambda')
             lambda_payload = {"nombre":"nombre"}
             lambda_payload = json.dumps(lambda_payload)
             lambda_client.invoke(FunctionName='lambdaSNS', 
@@ -360,34 +322,6 @@ def search_faces(image):
         #Retorna listas vacías
         return listface, similarity, confidence
 
-
-#Se define función para actualizar un item de la base de datos de mysql
-#Recibe como parámetros el ExternalImageId, la fecha, la hora, la similaridad y la confianza del item a actualizar
-def updateItemDB(imgId,date,time,conexion,similarity,confidence):
-    similarity = round(similarity,2)
-    confidence = round(confidence,2)
-
-    #Establecer conexión con mysql
-    cursorUpdate = conexion.cursor()
-    
-    #query para actualización de la tabla de control para las columnas
-    #fecha, hora, estado = 1, similaridad y confianza de la persona identificada, 
-    #indicando que la persona a sido identificada.
-    consultaUpdate = "UPDATE control set fecha= '{0}',hora ='{1}',estado='{2}',similaridad='{3}',confianza='{4}' where nombre= '{5}';".format(date,time,1,similarity,confidence,imgId)
-
-    try:
-        #Se ejecuta la actualización
-        cursorUpdate.execute(consultaUpdate) #Se realiza la actualización
-        
-    except Exception as msg:
-
-        print(f"Oops, no se pudo actualizar el item: {msg}")
-
-    #Se termina la actualización
-    conexion.commit()
-    cursorUpdate.close()
-
-
 #Función para eliminar objetos del bucket
 #La función recibe como parámetros el nombre del bucket y de la imagen
 def deleteObject(bucket, key):
@@ -396,68 +330,6 @@ def deleteObject(bucket, key):
     s3 = boto3.resource('s3')
     s3.Object(bucket, key).delete()
 
-#Función para crear un nuevo item en la tabla de registro en mysql
-def createRegister(conexion,imgsid,date,time):
-
-                    cursorInsert = conexion.cursor()
-
-                    nombre = imgsid #nombre de la persona identificada en la collection
-                    fecha = date #Fecha de la última actualización de la imagen
-                    hora = time #hora de la última actualización de la 
-
-                    #Query para inserta item con nombre, fecha y hora en la tabla registro.
-                    consulta = "INSERT  INTO  registro(nombre, fecha, hora) VALUES('{0}', '{1}', '{2}');".format(nombre,
-                     fecha, hora)
-
-                    #Realizar insert
-                    cursorInsert.execute(consulta)
-
-                    conexion.commit()
-                    cursorInsert.close()
-
-#Función  para obtener la diferencia de tiempo entre dos captura de una misma persona
-#La función recibe como parámetros la conexión con la base de datos de mysql, el tiempo de la captura actual
-#y el nombre de la persona detectada en la captura
-def timeDifference(conexion, endTime,nombre,fechaActual):
-    
-    try:
-        #Se selecciona de la tabla de registro los registros de la persona seleccionada
-        sql_select_Query = "select hora from registro where nombre = '{0}'".format(nombre)
-
-        cursor = conexion.cursor()
-        cursor.execute(sql_select_Query)
-
-        #Se guardan todos los registros en una lista
-        records = cursor.fetchall()
-
-        #Número de registro de la persona
-        numberRow = cursor.rowcount
-     
-        #Se obtiene la hora del  último registro de la persona
-        fecha = records[numberRow-1][0]
-        startTime = records[numberRow-1][1]
-
-        if fecha != fechaActual:
-            return 6
-
-        #Se convierte la hora de string a formate datetime
-        t1 = dt.strptime(startTime[0], "%H:%M:%S")
-        t2 = dt.strptime(endTime, "%H:%M:%S")
-
-        #Se obtiene la diferencia de los dos tiempos
-        delta = t2 - t1
-        
-        cursor.close()
-
-        dif = delta.total_seconds() #Se pasa la diferencia a segundos
-
-        #La función retorna la diferencia de los dos tiempos en segundos
-        return dif
-
-    except:
-        #Se retorna un valor de 6 para que si la persona no tiene aún ningún resgistro en la tabla registros
-        #Se agrege el registro como registro inicial
-        return 6 
 
 #Función para corregir la orientación de la imagen
 #Recibe la imagen en bytes
