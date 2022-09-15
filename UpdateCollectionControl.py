@@ -3,7 +3,7 @@ import os
 from botocore.exceptions import ClientError
 import logging
 import mysql.connector 
-import csv
+import pandas as pd
 
 
 #from mysql import mysql_start_connection, create_initial_collection_mysql_db, mysql_display,mysql_end_connection
@@ -15,10 +15,10 @@ import csv
 
 def read_csv(path_csv):
     lista = []
-    with open("/home/analitica2/Documentos/personas.csv") as csvfile:
-        reader = csv.DictReader(csvfile)
-        for row in reader:
-            lista.append(row)
+    df = pd.read_excel (path_csv)
+    for row in df.itertuples():
+        tulple = (row.Cedula,row.Nombre,row.Apellido,row.Cargo)
+        lista.append(tulple)
     return lista
 
 def add_faces_to_collection(collection_id, region,path,control):
@@ -32,7 +32,7 @@ def add_faces_to_collection(collection_id, region,path,control):
             for images in fpath_folders:
 
                 file_image = r''+path + '\\'+ folder + '\\'+ images
-                photo_name = folder
+                cedula = folder
             
                 # Se llama al cliente de rekognition en la region indicada 
                 client = boto3.client('rekognition', region_name=region)
@@ -41,9 +41,9 @@ def add_faces_to_collection(collection_id, region,path,control):
                 imageTarget = open(file_image, 'rb')
                 
                 # con la funcion index_faces agregamos la imagen en bytes a la collection indicada
-                response = client.index_faces(CollectionId=collection_id,
+                client.index_faces(CollectionId=collection_id,
                     Image={'Bytes': imageTarget.read()},
-                    ExternalImageId=photo_name,
+                    ExternalImageId=cedula,
                     MaxFaces=1,
                     QualityFilter="AUTO")
         print("Se agrego correctamente "+folder + " en la collection")
@@ -154,36 +154,41 @@ def mysql_display(conexion):
 def mysql_end_connection(conexion):    
     conexion.close()
 
-def insert_data_mysql_collection(conexion,item,file_url):
+def insert_data_mysql_collection(conexion,item,file_url,lista_csv):
                     print("Se van a insertar los datos")
                     # insertar datos en la tabla
                     cursorInsert = conexion.cursor()
                     faceid = item[0]
                     print(faceid)
-                    nombre = item[2]
-                    print(nombre)
+                    cedula = item[2]
+                    print(cedula)
                     url = file_url
                     print(url)
-
-                    consulta = "INSERT  INTO  collection(faceId, nombre, bucket) VALUES('{0}', '{1}', '{2}');".format(faceid,nombre,url)
-                    cursorInsert.execute(consulta)
+                    for person in lista_csv:
+                        if person[0]==cedula:
+                            consulta = "INSERT  INTO  collection(faceId, nombre,apellido, bucket) VALUES('{0}', '{1}', '{2}','{3}');".format(faceid,person[1],person[2],url)
+                            cursorInsert.execute(consulta)
+                            break
 
                     conexion.commit()
                     cursorInsert.close()
 
-def insert_data_mysql_control(conexion,item):
+def insert_data_mysql_control(conexion,item,lista_csv):
                     print("Se van a insertar los datos a control")
                     # insertar datos en la tabla
                     cursorInsert = conexion.cursor()
-                    nombre = item[2]
-                    print(nombre)
-                    consulta = "INSERT  INTO  control(nombre, fecha, hora,estado,similaridad, confianza) VALUES('{0}', '{1}', '{2}','{3}','{4}','{5}');".format(nombre,"0000-00-00","00:00:00",0,0.00,0.00)
-                    cursorInsert.execute(consulta)
+                    cedula = item[2]
+                    print(cedula)
+                    for person in lista_csv:
+                        if person[0]==cedula:
+                            consulta = "INSERT  INTO  control(cedula, nombre, apellido, cargo, fecha, hora,estado,similaridad, confianza) VALUES('{0}', '{1}', '{2}','{3}','{4}','{5}','{6}','{7}','{8}');".format(cedula,person[1],person[2],person[3],"0000-00-00","00:00:00",0,0.00,0.00)
+                            cursorInsert.execute(consulta)
+                            break
 
                     conexion.commit()
                     cursorInsert.close()
 
-def create_initial_collection_mysql_db(lista,keys,conexion,bucketName,control):
+def create_initial_collection_mysql_db(lista,keys,conexion,bucketName,control,lista_csv):
 
     # la lista creada en la descripcion de las caras en la collection y los paths en la lista keys se recorren
     # y se emparejan los faceId de cada cara con la imagen en el bucket
@@ -198,11 +203,11 @@ def create_initial_collection_mysql_db(lista,keys,conexion,bucketName,control):
                     file_url = "https://s3.amazonaws.com/{}/{}".format(bucketName, key_name)
                     # Mock values for face ID, image ID, and confidence - replace them with actual values from your collection results
                     try:
-                        insert_data_mysql_control(conexion,item)
+                        insert_data_mysql_control(conexion,item,lista_csv)
                     except:
                         print("ya esta en control")
                     try:
-                        insert_data_mysql_collection(conexion,item,file_url)
+                        insert_data_mysql_collection(conexion,item,file_url,lista_csv)
                         print("Se agrego exitosamente los datos de la collection a RDS collection table")
                     except:
                         print("El usuario ya se encuentra en la tabla")
@@ -222,7 +227,7 @@ def mysql_members(conexion):
 def main():
     #En este caso agregamos las imagenes desde el path del local 
     path =r'C:\Users\user\Desktop\collection'
-    path_csv = ''
+    path_csv = r'C:\Users\user\Desktop\Despliegue rekognition\personas.xlsx'
     collection_id='collection-rekognition'
     region = "us-east-1"
     bucket = "fotos-collection-rekognition"
@@ -230,17 +235,19 @@ def main():
     conexion = mysql_start_connection("analitica","analitica123" , 
     "analitica-ml.cwklrzbxbt5x.us-east-1.rds.amazonaws.com", "reconocimiento", 3306)
 
-    lista = mysql_members(conexion)
+    lista_csv = read_csv(path_csv)
 
-    add_faces_to_collection( collection_id, region,path,lista)
+    lista_control = mysql_members(conexion)
+
+    add_faces_to_collection( collection_id, region,path,lista_control)
 
     lista_collection = list_faces_in_collection(collection_id)
 
-    put_folder_s3(region,path,bucket,lista)
+    put_folder_s3(region,path,bucket,lista_control)
 
     keys = list_Objects_from_Bucket(bucket)
 
-    create_initial_collection_mysql_db(lista_collection,keys,conexion,bucket,lista)
+    create_initial_collection_mysql_db(lista_collection,keys,conexion,bucket,lista_control,lista_csv)
 
     mysql_display(conexion)
 

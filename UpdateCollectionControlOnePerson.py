@@ -4,7 +4,6 @@ from botocore.exceptions import ClientError
 import logging
 import mysql.connector 
 
-
 #from mysql import mysql_start_connection, create_initial_collection_mysql_db, mysql_display,mysql_end_connection
 
 
@@ -13,7 +12,6 @@ import mysql.connector
 #donde se desea agregar la cara y la region de aws
 
 def add_faces_to_collection(collection_id, region,path):
-    diccionario ={}
     fpath = os.listdir(path)
     for images in fpath:
 
@@ -32,12 +30,6 @@ def add_faces_to_collection(collection_id, region,path):
             ExternalImageId=photo_name,
             MaxFaces=1,
             QualityFilter="AUTO")
-        
-        #Creamos un diccionario con el FaceId de la persona indexada y valor de path de imagen
-        diccionario[response['FaceRecords'][0]['Face']['FaceId']] = images
-
-    return diccionario
-    
 
 
 # la funcion list_faces_in_collection retorna una lista con la información de cada
