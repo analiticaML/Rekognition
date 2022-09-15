@@ -170,6 +170,22 @@ def objectDate(bucket,key):
 #La función recibe como parámetros el nombre del bucket y de la imagen.
 def detect_faces(bucket,key):
 
+    
+     #Se carga imagen de un bucket S3
+    s3_connection = boto3.resource('s3')
+    s3_object = s3_connection.Object(bucket,key)
+    s3_response = s3_object.get()
+
+    
+    #Se convierte el objeto de S3 en una imagen en bytes
+    stream = io.BytesIO(s3_response['Body'].read())
+
+    #Se convierte imagen a una imagen tipo PIL
+    image=Image.open(stream)
+
+    #Se llama la función de cambio de ortientación a la imagen
+    image = setOrientationImage(image)
+    
     #Cliente representando servicio de rekognition
     client=boto3.client('rekognition', 'us-east-1')
     
@@ -185,18 +201,6 @@ def detect_faces(bucket,key):
         print('The detected face is between ' + str(faceDetail['AgeRange']['Low']) 
             + ' and ' + str(faceDetail['AgeRange']['High']) + ' years old')
 
-
-    #Se carga imagen de un bucket S3
-    s3_connection = boto3.resource('s3')
-    s3_object = s3_connection.Object(bucket,key)
-    s3_response = s3_object.get()
-
-    
-    #Se convierte el objeto de S3 en una imagen en bytes
-    stream = io.BytesIO(s3_response['Body'].read())
-
-    #Se convierte imagen a una imagen tipo PIL
-    image=Image.open(stream)
 
     #Tamaño de la imagen en pixeles
     imgWidth, imgHeight = image.size  
@@ -291,45 +295,45 @@ def search_faces(image):
                                          MaxFaces=maxFaces)
                 
         faceMatches = response['FaceMatches']     
-
+    
         
-
+    
         if not faceMatches:
-
+    
             conexion = mysql_start_connection("analitica","analitica123" , 
             "analitica-ml.cwklrzbxbt5x.us-east-1.rds.amazonaws.com", "reconocimiento", 3306)
-
+    
             imagen = base64.b64encode(image)
             #Establecer conexión con mysql
             cursorUpdate = conexion.cursor()
     
             #query para actualización de la tabla de unknown
             query = """ UPDATE unknown set imagen = %s where persona = %s"""
-
+    
             try:
                 #Se ejecuta la actualización
                 cursorUpdate.execute(query, ( imagen,"PersonaDesconocida")) #Se realiza la actualización
         
             except Exception as msg:
-
+    
                 print(f"Oops, no se pudo actualizar el item: {msg}")
-
+    
             #Se termina la actualización
             conexion.commit()
             cursorUpdate.close()
             
-
+    
             mysql_end_connection(conexion)
-
-
-
+    
+    
+    
             lambda_client = boto3.client('lambda')
             lambda_payload = {"nombre":"nombre"}
             lambda_payload = json.dumps(lambda_payload)
             lambda_client.invoke(FunctionName='lambdaSNS', 
             InvocationType='Event',
             Payload=lambda_payload)
-
+    
         
         for match in faceMatches:
             print('--------------------\n')
@@ -345,8 +349,8 @@ def search_faces(image):
                 similarity.append(match['Similarity'])
                 confidence.append(match['Face']['Confidence'])
                     
-
-
+    
+    
         #Retorna lista con el ExternalImageId de las coincidencias en la colección
         #lista con las similaridades y con las confianzas de las coincidencias para cada imagen de la colección
         return listface, similarity, confidence
@@ -454,3 +458,33 @@ def timeDifference(conexion, endTime,nombre,fechaActual):
         #Se retorna un valor de 6 para que si la persona no tiene aún ningún resgistro en la tabla registros
         #Se agrege el registro como registro inicial
         return 6 
+
+#Función para corregir la orientación de la imagen
+#Recibe la imagen en bytes
+def setOrientationImage(image):
+    
+    imagen = image
+
+    #Se cambia el nombre clave de la orientación de los metadatos de la imagen a Orientation
+    for orientation in ExifTags.TAGS.keys():
+        if ExifTags.TAGS[orientation]=='Orientation':
+            break
+        
+    
+    try:
+        #Se toman los metadatos de la imagen
+        exif = imagen._getexif()
+    
+        #Se hacen la rotaciones necesarias para que la imagen quede orientada 0°
+        if exif[orientation] == 3:
+            imagen=imagen.rotate(180, expand=True)
+        elif exif[orientation] == 6:
+            imagen=imagen.rotate(270, expand=True)
+        elif exif[orientation] == 8:
+            imagen=imagen.rotate(90, expand=True)
+    
+        #Se retorna la imagen rotada
+        return imagen
+    
+    except:
+        return imagen
