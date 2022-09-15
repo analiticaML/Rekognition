@@ -3,6 +3,7 @@ import os
 from botocore.exceptions import ClientError
 import logging
 import mysql.connector 
+import csv
 
 
 #from mysql import mysql_start_connection, create_initial_collection_mysql_db, mysql_display,mysql_end_connection
@@ -11,6 +12,14 @@ import mysql.connector
 #la funcion  add_faces_to_collection añade una cara a la collection
 #recibe como parametro la imagen, el nombre de la imagen, la collection_id 
 #donde se desea agregar la cara y la region de aws
+
+def read_csv(path_csv):
+    lista = []
+    with open("/home/analitica2/Documentos/personas.csv") as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            lista.append(row)
+    return lista
 
 def add_faces_to_collection(collection_id, region,path,control):
 
@@ -213,6 +222,7 @@ def mysql_members(conexion):
 def main():
     #En este caso agregamos las imagenes desde el path del local 
     path =r'C:\Users\user\Desktop\collection'
+    path_csv = ''
     collection_id='collection-rekognition'
     region = "us-east-1"
     bucket = "fotos-collection-rekognition"
