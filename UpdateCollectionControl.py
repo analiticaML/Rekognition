@@ -46,7 +46,7 @@ def add_faces_to_collection(collection_id, region,path,control):
                     ExternalImageId=cedula,
                     MaxFaces=1,
                     QualityFilter="AUTO")
-        print("Se agrego correctamente "+folder + " en la collection")
+        print("Se agregó correctamente "+folder + " en la collection")
                 
                 #Creamos un diccionario con el FaceId de la persona indexada y valor de path de imagen
            
@@ -159,17 +159,14 @@ def insert_data_mysql_collection(conexion,item,file_url,lista_csv):
                     # insertar datos en la tabla
                     cursorInsert = conexion.cursor()
                     faceid = item[0]
-                    print(faceid)
                     cedula = item[2]
-                    print(cedula)
                     url = file_url
-                    print(url)
                     for person in lista_csv:
-                        if person[0]==cedula:
+                        if int(person[0])==int(cedula):
                             consulta = "INSERT  INTO  collection(faceId, nombre,apellido, bucket) VALUES('{0}', '{1}', '{2}','{3}');".format(faceid,person[1],person[2],url)
-                            cursorInsert.execute(consulta)
+                            print("Se agregó a la collection")
                             break
-
+                    cursorInsert.execute(consulta)
                     conexion.commit()
                     cursorInsert.close()
 
@@ -180,11 +177,11 @@ def insert_data_mysql_control(conexion,item,lista_csv):
                     cedula = item[2]
                     print(cedula)
                     for person in lista_csv:
-                        if person[0]==cedula:
+                        if int(person[0])==int(cedula):
                             consulta = "INSERT  INTO  control(cedula, nombre, apellido, cargo, fecha, hora,estado,similaridad, confianza) VALUES('{0}', '{1}', '{2}','{3}','{4}','{5}','{6}','{7}','{8}');".format(cedula,person[1],person[2],person[3],"0000-00-00","00:00:00",0,0.00,0.00)
-                            cursorInsert.execute(consulta)
+                            print("Se agregó a control")
                             break
-
+                    cursorInsert.execute(consulta)
                     conexion.commit()
                     cursorInsert.close()
 
@@ -226,11 +223,11 @@ def mysql_members(conexion):
 
 def main():
     #En este caso agregamos las imagenes desde el path del local 
-    path =r'C:\Users\user\Desktop\collection'
-    path_csv = r'C:\Users\user\Desktop\Despliegue rekognition\personas.xlsx'
-    collection_id='collection-rekognition'
+    path =r'C:\Users\user\Documents\CollectionDB'
+    path_csv = r'C:\Users\user\Documents\BDTelemetrik.xlsx'
+    collection_id='collection-telemetrik'
     region = "us-east-1"
-    bucket = "fotos-collection-rekognition"
+    bucket = "bucket-collection"
 
     conexion = mysql_start_connection("analitica","analitica123" , 
     "analitica-ml.cwklrzbxbt5x.us-east-1.rds.amazonaws.com", "reconocimiento", 3306)
@@ -239,14 +236,27 @@ def main():
 
     lista_control = mysql_members(conexion)
 
-    add_faces_to_collection( collection_id, region,path,lista_control)
+    #add_faces_to_collection( collection_id, region,path,lista_control)
 
     lista_collection = list_faces_in_collection(collection_id)
 
-    put_folder_s3(region,path,bucket,lista_control)
+    #put_folder_s3(region,path,bucket,lista_control)
 
     keys = list_Objects_from_Bucket(bucket)
 
+    print("lista collection:")
+    print(lista_collection)
+    print("-----------------------------------------")
+    print("lista control:")
+    print(lista_control)
+    print("-----------------------------------------")
+    print("keys:")
+    print(keys)
+    print("-----------------------------------------")
+    print("csv:")
+    print(lista_csv)
+    print("-----------------------------------------")
+    
     create_initial_collection_mysql_db(lista_collection,keys,conexion,bucket,lista_control,lista_csv)
 
     mysql_display(conexion)
