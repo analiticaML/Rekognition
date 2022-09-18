@@ -5,13 +5,7 @@ import logging
 import mysql.connector 
 import pandas as pd
 
-
-#from mysql import mysql_start_connection, create_initial_collection_mysql_db, mysql_display,mysql_end_connection
-
-
-#la funcion  add_faces_to_collection añade una cara a la collection
-#recibe como parametro la imagen, el nombre de la imagen, la collection_id 
-#donde se desea agregar la cara y la region de aws
+#
 
 def read_csv(path_csv):
     lista = []
@@ -21,13 +15,18 @@ def read_csv(path_csv):
         lista.append(tulple)
     return lista
 
+#la funcion  add_faces_to_collection añade una cara a la collection
+#recibe como parametro la imagen, el nombre de la imagen, la collection_id 
+#donde se desea agregar la cara y la region de aws
 def add_faces_to_collection(collection_id, region,path,control):
 
+    # se hace una lista de las imagenes que hay en el path
     fpath = os.listdir(path)
     # se crea una dos ciclos for para recorrer el path del local y cada directorio en el, donde se encuentran las imagenes
     for folder in fpath:
         path_folders =  path +'\\' + folder
         fpath_folders = os.listdir(path_folders)
+        # Si el nombre de la carpeta no se encuentra en mysql entonces lo lo agregara a la collection
         if folder not in control:
             for images in fpath_folders:
 
@@ -130,17 +129,20 @@ def list_Objects_from_Bucket(bucketName):
     print("Se agregaron los paths de los objetos a una lista")
     return keys
 
+# la funcion mysql_start_connection realiza la conexion con la base de datos mysql
 def mysql_start_connection(user, password, host, database, port):
     
+    # en un try se intenta conectar a la base de datos, dando las credenciales de la propia
     try:
         conexion = mysql.connector.connect(user = user, password=password, host = host, database = database, port =port)
         print("conexion exitosa")
-
+    # la funcion retorna la variable conexion
         return conexion
 
     except:
         print("falla en la conexion ")
 
+# esta funcion muestra el resultado de las personas que estan en la coleccion y las imprime
 def mysql_display(conexion):
     cursor = conexion.cursor()
     cursor.execute("Select * from collection;")
@@ -151,40 +153,61 @@ def mysql_display(conexion):
 
     cursor.close()
 
+# Esta funcion cierra la conexion con la base de datos
 def mysql_end_connection(conexion):    
     conexion.close()
 
+# funcion para ingresar personas a la collection
 def insert_data_mysql_collection(conexion,item,file_url,lista_csv):
                     print("Se van a insertar los datos")
-                    # insertar datos en la tabla
+                    # Cursor para insertar datos en la tabla
                     cursorInsert = conexion.cursor()
+
+                    #DE la lista item tenemos cedula y faceID
                     faceid = item[0]
                     cedula = item[2]
                     url = file_url
+                    # En un for recorremos las personas que estaban en la lista del archivo excel
                     for person in lista_csv:
+
+                        #Se realiza un condicion para que solo coincidan quienes tienen la misma cedula en ambas listas
                         if int(person[0])==int(cedula):
+
+                            #Se realiza el query para insertar a la collection
                             consulta = "INSERT  INTO  collection(faceId, nombre,apellido, bucket) VALUES('{0}', '{1}', '{2}','{3}');".format(faceid,person[1],person[2],url)
                             print("Se agregó a la collection")
                             break
+
+                    # se ejecuta y realiza el comit en la conexion, luego se cierra el cursor
                     cursorInsert.execute(consulta)
                     conexion.commit()
                     cursorInsert.close()
 
+# Función para insertar datos en la tabla control
 def insert_data_mysql_control(conexion,item,lista_csv):
                     print("Se van a insertar los datos a control")
-                    # insertar datos en la tabla
+                    # Cursor para insertar datos en la tabla
                     cursorInsert = conexion.cursor()
+                    #se tiene la cedula de la lista item
                     cedula = item[2]
                     print(cedula)
+                    # En un for recorremos las personas que estaban en la lista del archivo excel
                     for person in lista_csv:
+
+                        #Se realiza un condicion para que solo coincidan quienes tienen la misma cedula en ambas listas
                         if int(person[0])==int(cedula):
+
+                            # se realiza el insert a control
                             consulta = "INSERT  INTO  control(cedula, nombre, apellido, cargo, fecha, hora,estado,similaridad, confianza) VALUES('{0}', '{1}', '{2}','{3}','{4}','{5}','{6}','{7}','{8}');".format(cedula,person[1],person[2],person[3],"0000-00-00","00:00:00",0,0.00,0.00)
                             print("Se agregó a control")
                             break
+                    
+                    # se ejecuta y realiza el comit en la conexion, luego se cierra el cursor
                     cursorInsert.execute(consulta)
                     conexion.commit()
                     cursorInsert.close()
 
+# esta funcion es la encargada de ejecutar y llamar las funciones de insert a collection y control
 def create_initial_collection_mysql_db(lista,keys,conexion,bucketName,control,lista_csv):
 
     # la lista creada en la descripcion de las caras en la collection y los paths en la lista keys se recorren
@@ -198,7 +221,8 @@ def create_initial_collection_mysql_db(lista,keys,conexion,bucketName,control,li
                     key_name = key
                     # Get URL of file
                     file_url = "https://s3.amazonaws.com/{}/{}".format(bucketName, key_name)
-                    # Mock values for face ID, image ID, and confidence - replace them with actual values from your collection results
+                    
+                    #Se realiza un try para intentar insertar en control y collection
                     try:
                         insert_data_mysql_control(conexion,item,lista_csv)
                     except:
@@ -208,6 +232,8 @@ def create_initial_collection_mysql_db(lista,keys,conexion,bucketName,control,li
                         print("Se agrego exitosamente los datos de la collection a RDS collection table")
                     except:
                         print("El usuario ya se encuentra en la tabla")
+
+# Esta funcion llama la conexion y retorna una lista de las personas que estan en control
 def mysql_members(conexion):
     lista =[]
     cursor = conexion.cursor()
@@ -221,27 +247,39 @@ def mysql_members(conexion):
 
     return(lista)
 
+#funcion principal del codigo que llama el resto de funciones
 def main():
     #En este caso agregamos las imagenes desde el path del local 
     path =r'C:\Users\user\Documents\CollectionDB'
+    # se da la direccion del path dondes de encuentra el archivo excel
     path_csv = r'C:\Users\user\Documents\BDTelemetrik.xlsx'
+
+    #Nombre de la collection de rekognition
     collection_id='collection-telemetrik'
     region = "us-east-1"
+    #Nombre del bucket donde se espera subir las imagenes de collection a s3
     bucket = "bucket-collection"
 
+    # Se llama la funcion que realiza la conexion
     conexion = mysql_start_connection("analitica","analitica123" , 
     "analitica-ml.cwklrzbxbt5x.us-east-1.rds.amazonaws.com", "reconocimiento", 3306)
 
+    # Funcion que devuelve las listas de las personas en el excel
     lista_csv = read_csv(path_csv)
 
+    # funcion que devuelve la lista de personas en la tabla de control
     lista_control = mysql_members(conexion)
 
-    #add_faces_to_collection( collection_id, region,path,lista_control)
+    #Funcuon para añadir personas a la collection de rekognition
+    add_faces_to_collection( collection_id, region,path,lista_control)
 
+    #Funcion para obtenes la lista de personas en la collection de rekognition
     lista_collection = list_faces_in_collection(collection_id)
 
-    #put_folder_s3(region,path,bucket,lista_control)
+    #Funcion para agregar las imagenes a s3
+    put_folder_s3(region,path,bucket,lista_control)
 
+    #Lista de las imagenes en s3
     keys = list_Objects_from_Bucket(bucket)
 
     print("lista collection:")
@@ -256,11 +294,14 @@ def main():
     print("csv:")
     print(lista_csv)
     print("-----------------------------------------")
-    
+
+    #Funcion que se encarga de añadir personas a las tablas de mysql
     create_initial_collection_mysql_db(lista_collection,keys,conexion,bucket,lista_control,lista_csv)
 
+    #Funcion para obtener las personas que hay en collection o control
     mysql_display(conexion)
 
+    #Funcion para cerrar la conexion con mysql
     mysql_end_connection(conexion)
     
 if __name__ == "__main__":
