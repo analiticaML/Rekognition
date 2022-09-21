@@ -63,7 +63,7 @@ def lambda_handler(event, context):
         #1 indica que reconoció a una persona de la colección y 0 que no la reconoció                 
         if imgsid:
 
-            lambda_payload = {"nombre":imgsid[0],"date":str(date),"time":str(time),
+            lambda_payload = {"cedula":imgsid[0],"date":str(date),"time":str(time),
             "similarity":similarity[0],"confidence":confidence[0]}
             lambda_payload = json.dumps(lambda_payload)
             lambda_client.invoke(FunctionName='lambdaMysql', 

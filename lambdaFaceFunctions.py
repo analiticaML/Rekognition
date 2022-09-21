@@ -288,3 +288,4 @@ def setOrientationImage(image):
     
     except:
         return imagen
+        
