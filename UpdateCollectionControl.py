@@ -28,7 +28,7 @@ def add_faces_to_collection(collection_id, region,path,control):
     for folder in fpath:
         path_folders =  path +'\\' + folder
         fpath_folders = os.listdir(path_folders)
-        if folder not in control:
+        if int(folder) not in control:
             for images in fpath_folders:
 
                 file_image = r''+path + '\\'+ folder + '\\'+ images
@@ -99,7 +99,7 @@ def put_folder_s3(region,path,bucket,control):
     for folder in fpath:
         path_folders =  path +'\\' + folder
         fpath_folders = os.listdir(path_folders)
-        if folder not in control:
+        if int(folder) not in control:
             for images in fpath_folders:
                 file_image = r''+path + '\\'+ folder + '\\'+ images
                 key_name = folder+'/'+ images
@@ -236,26 +236,13 @@ def main():
 
     lista_control = mysql_members(conexion)
 
-    #add_faces_to_collection( collection_id, region,path,lista_control)
+    add_faces_to_collection( collection_id, region,path,lista_control)
 
     lista_collection = list_faces_in_collection(collection_id)
 
-    #put_folder_s3(region,path,bucket,lista_control)
+    put_folder_s3(region,path,bucket,lista_control)
 
     keys = list_Objects_from_Bucket(bucket)
-
-    print("lista collection:")
-    print(lista_collection)
-    print("-----------------------------------------")
-    print("lista control:")
-    print(lista_control)
-    print("-----------------------------------------")
-    print("keys:")
-    print(keys)
-    print("-----------------------------------------")
-    print("csv:")
-    print(lista_csv)
-    print("-----------------------------------------")
     
     create_initial_collection_mysql_db(lista_collection,keys,conexion,bucket,lista_control,lista_csv)
 
