@@ -47,6 +47,7 @@ def lambda_handler(event, context):
     #Se obtiene de la función una lista con las imagenes de las caras de cada una de las personas en la imagen
     listaimg=cropFace(image,dictionary,num,key)
 
+    carascount = 0
 
     #Se recorren todas las caras de las personas identificadas en la captura.
     for image in listaimg:
@@ -70,6 +71,10 @@ def lambda_handler(event, context):
             InvocationType='Event',
             Payload=lambda_payload)
 
-            #Si se identificó a la persona en la colección se elimina la imagen del bucket
-            deleteObject(bucket,key)
+            carascount+=1
+
+    #Si el número de caras detectadas es igual al número de caras en la imagen entonces se borra la imagen 
+    #del bucket
+    if carascount==len(listaimg):
+        deleteObject(bucket,key)
 
