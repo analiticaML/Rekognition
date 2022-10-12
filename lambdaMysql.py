@@ -55,8 +55,11 @@ def lambda_handler(event, context):
             apellido = person[2]
             
             break
+
+    numRegistro = searchRegistro(conexion,cedula)
     #Se llama la función para actualizar un item de la base de datos
-    updateItemDB(cedula,date,time,conexion,similarity,confidence)
+    if numRegistro == 0:
+        updateItemDB(cedula,date,time,conexion,similarity,confidence)
 
     #Se llama la función para obtener diferencia de tiempos entre capturas para una misma persona
     delta = timeDifference(conexion,time,cedula,date)
@@ -213,3 +216,27 @@ def mysql_members(conexion):
     print("obtuvo la lista de control")
 
     return(lista)
+
+def searchRegistro(conexion,cedula):
+    
+    try:
+        #Se selecciona de la tabla de registro los registros de la persona seleccionada
+        sql_select_Query = "select fecha from registro where cedula = '{0}' and fecha = CURDATE()".format(cedula)
+    
+        cursor = conexion.cursor()
+        cursor.execute(sql_select_Query)
+    
+        #Se guardan todos los registros en una lista
+        records = cursor.fetchall()
+    
+        print(records)
+    
+        #Número de registro de la persona
+        numberRow = cursor.rowcount
+    
+        return numberRow
+
+    except:
+        #Se retorna un valor de 6 para que si la persona no tiene aún ningún resgistro en la tabla registros
+        #Se agrege el registro como registro inicial
+        return 0
